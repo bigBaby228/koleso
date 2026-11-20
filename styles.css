@@ -215,3 +215,11 @@ button{font:inherit;color:inherit;border:none;background:none;cursor:pointer}
 .contbtn{width:100%;margin-bottom:14px}
 .turnchip{font-size:11px;color:var(--hint);text-align:center;margin-top:4px}
 .bubdie{animation:pop .5s}
+
+/* --- Средний круг --- */
+.mid .hud{background:linear-gradient(135deg,#12393a,#1d3552)}
+.mid .center{background:linear-gradient(160deg,#143a3c,#232e3c)}
+.mid .ctitle{color:#5fe0c4}
+.mid .mainbtn{background:linear-gradient(90deg,#14947d,#1fb796)}
+.modetag.mid{background:#5fe0c4;color:#06302a}
+.tbtns small{font-weight:600;opacity:.85}
