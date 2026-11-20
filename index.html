@@ -28,14 +28,14 @@
       <div class="lbl">Профессия</div>
       <div id="profList"></div>
       <div class="howto">
-        <b>Круг 1. Колесо.</b> Работаешь, чтобы жить. Покупай активы, пока пассивный доход не покроет расходы. Мешают инфляция, соблазны и прогорающие бизнесы. Кредит помогает, но платёж съедает поток, так что считай. 🎲 Темки дают 10–20 тысяч или оставляют без денег и с долгом коллекторам.<br><br>
+        <b>Круг 1. Колесо.</b> Работаешь, чтобы жить. Покупай активы, пока пассивный доход не покроет расходы. Мешают инфляция, соблазны и прогорающие бизнесы. Кредит помогает, но платёж съедает поток, так что считай. 🎲 Темки дают 10–20 тысяч или оставляют без денег и с долгом коллекторам. Во вкладке «Учёба» можно прокачать навыки: учёба стоит денег и хода.<br><br>
         <b>Круг 2. Средний.</b> Капитал работает на тебя. Сети, производства, бизнес-события и крупные темки. Каждая покупка умножает поток. Цель — <b>$100 000 в месяц</b>.<br><br>
         <b>Круг 3. Большая игра.</b> Кредитов нет. Выкупай компании с биржи, разгоняй и обваливай акции (берегись ФАС), инвестируй и купи мечту на её клетке. <b>Кто первым это сделает, тот и выиграл.</b><br><br>
         <b>Биржа.</b> Новости двигают цены за два следующих броска. Успей купить или продать до них. Слухи сбываются не всегда.
       </div>
       <button class="testlink" onclick="UI.debugMid()">🧪 Тест: сразу на средний круг</button>
       <button class="testlink" style="margin-top:4px" onclick="UI.debugFast()">🧪 Тест: сразу в Большую игру</button>
-      <div style="text-align:center;font-size:11px;color:var(--hint);margin-top:10px;opacity:.7">Версия 0.4 · 20.11.2026</div>
+      <div style="text-align:center;font-size:11px;color:var(--hint);margin-top:10px;opacity:.7">Версия 0.5 · 20.11.2026</div>
     </div>
   </div>
 
@@ -57,6 +57,7 @@
     <div class="tabs">
       <button class="tab on" data-v="board">Поле</button>
       <button class="tab" data-v="ex">Биржа <span class="badge hidden" id="exbadge">0</span></button>
+      <button class="tab" data-v="edu">Учёба</button>
       <button class="tab" data-v="report">Отчёт</button>
       <button class="tab" data-v="chat">Чат <span class="badge hidden" id="badge">0</span></button>
     </div>
@@ -75,6 +76,7 @@
       <div class="legend" id="legend"></div>
     </div>
     <div class="view hidden" id="v-ex"><div class="ex" id="ex"></div></div>
+    <div class="view hidden" id="v-edu"><div class="rep" id="edu"></div></div>
     <div class="view hidden" id="v-report"><div class="rep" id="rep"></div></div>
     <div class="view hidden" id="v-chat"><div class="chat" id="chat"></div></div>
     <button class="mainbtn" id="rollBtn">🎲 Бросить кубик</button>

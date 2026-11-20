@@ -39,7 +39,12 @@ const loanPay = p => Math.round(p.loans.reduce((x, l) => x + l.amt * l.rate, 0))
 const expenses = (s, p) => p.exp.reduce((x, e) => x + e[1], 0) + p.children * p.child + loanPay(p);
 const cashflow = (s, p) => p.salary + passive(s, p) - expenses(s, p);
 const freedom = (s, p) => Math.min(100, Math.round(passive(s, p) / expenses(s, p) * 100));
-const canBorrow = (s, p, n) => p.mode !== 'fast' && (diff(s).minF === null || cashflow(s, p) - n * s.rate >= p.salary * diff(s).minF);
+const has = (p, sk) => !!(p.skills && p.skills.includes(sk));
+const rateFor = (s, p) => Math.max(0.01, Math.round((s.rate - (has(p, 'credit') ? R.creditBonus : 0)) * 1000) / 1000);
+const canBorrow = (s, p, n) => p.mode !== 'fast' && (diff(s).minF === null || cashflow(s, p) - n * rateFor(s, p) >= p.salary * diff(s).minF);
+const skillCost = (s, p, sk) => scaleCost(s, p, D.SKILLS.find(x => x.id === sk).cost);
+const yieldK = s => R.yieldSpread[0] + rnd(s) * (R.yieldSpread[1] - R.yieldSpread[0]);
+const nego = (p, down) => has(p, 'negotiation') ? r100(down * R.negoDiscount) : down;
 function maxLoan(s, p) { if (diff(s).minF === null) return Infinity; let n = 0; while (canBorrow(s, p, n + 1000) && n < 1e7) n += 1000; return n; }
 const fTarget = p => Math.round(p.fstart * R.fastTarget);
 const fProgress = (s, p) => Math.max(0, Math.min(100, Math.round(Math.max(p.cash / p.dreamCost, (p.fflow - p.fstart) / (fTarget(p) - p.fstart)) * 100)));
@@ -66,7 +71,7 @@ function makePlayer(id, profId, o) {
   const P = D.PROFS.find(x => x.id === profId);
   return { id, name: o.name, emoji: o.emoji || P.e, color: o.color, bot: !!o.bot, prof: P.id, profName: P.n,
     salary: P.salary, child: P.child, exp: P.exp.map(e => [e[0], e[1]]), cash: P.cash, children: 0, loans: [], assets: [],
-    pos: 0, skip: 0, charity: 0, turns: 0, mode: 'rat', mstart: 0, midAt: 0, fastAt: 0, infTick: -1, fflow: 0, fstart: 0, finv: [], dream: null, dreamCost: 0, bankrupt: false };
+    pos: 0, skip: 0, charity: 0, turns: 0, skills: [], mode: 'rat', mstart: 0, midAt: 0, fastAt: 0, infTick: -1, fflow: 0, fstart: 0, finv: [], dream: null, dreamCost: 0, bankrupt: false };
 }
 function newGame(opt) {
   const seed = (opt.seed == null ? Date.now() : opt.seed) | 0;
@@ -103,6 +108,18 @@ function handle(s, a, ev) {
     case 'roll':
       need(s.phase === 'roll' && myTurn, 'Сейчас не твой ход');
       return doRoll(s, p, ev);
+    case 'study': {
+      need(s.phase === 'roll' && myTurn, 'Учиться можно в свой ход вместо броска');
+      const sk = D.SKILLS.find(x => x.id === a.skill); need(sk, 'Нет такого навыка');
+      need(!has(p, sk.id), 'Этот навык уже есть');
+      const cost = skillCost(s, p, sk.id); need(p.cash >= cost, 'Не хватает денег на учёбу');
+      p.cash -= cost; p.skills = (p.skills || []).concat(sk.id);
+      marketTick(s); p.turns++;
+      say(s, pid, `🎓 Отучился(ась): ${sk.e} ${sk.n}`);
+      toast(ev, pid, `🎓 Навык получен: ${sk.n}. Ход потрачен на учёбу`);
+      ev.push({ t: 'study', pid });
+      return endTurn(s, p, ev);
+    }
     case 'takeOffer': {
       need(s.phase === 'roll' && myTurn, 'Забрать сделку можно в свой ход до броска');
       need(p.mode !== 'fast', 'В Большой игре мелкие сделки не нужны');
@@ -171,7 +188,7 @@ function handle(s, a, ev) {
       need(s.phase === 'card' && myTurn && c && c.kind === 'media' && !c.used, 'Нет медиакампании');
       need(s.prices[a.tk], 'Нет такой компании');
       c.used = true;
-      const n = { id: ++s.uid, t: a.up ? `Телеканалы взахлёб хвалят ${a.tk}` : `Громкое расследование против ${a.tk} в прайм-тайм`, rum: false, tick: s.tick, status: '' };
+      const n = { id: ++s.uid, t: a.up ? `Телеканалы взахлёб хвалят ${a.tk}` : `Громкое расследование против ${a.tk} в прайм-тайм`, rum: false, tick: s.tick, status: '', fx: [{ tk: a.tk, m: a.up ? R.pumpEffect : -R.pumpEffect }] };
       s.pend.push({ tk: a.tk, m: a.up ? R.pumpEffect : -R.pumpEffect, real: true, nid: n.id, i: 0 });
       s.news.push(n); if (s.news.length > 20) s.news.shift();
       log(s, { k: 'news', text: n.t, rum: false });
@@ -189,15 +206,18 @@ function handle(s, a, ev) {
       const n = a.n | 0; need(n > 0 && n % 1000 === 0, 'Кредит выдаётся по $1000');
       need(p.mode !== 'fast', 'В Большой игре кредитов нет');
       need(canBorrow(s, p, n), 'Банк отказал: поток слишком маленький');
-      borrow(s, p, n); toast(ev, pid, `Кредит ${money(n)} под ${pct(s.rate)}: расходы +${money(n * s.rate)}/мес`);
+      borrow(s, p, n); toast(ev, pid, `Кредит ${money(n)} под ${pct(rateFor(s, p))}: расходы +${money(n * rateFor(s, p))}/мес`);
       return;
     }
     case 'repay': {
       const n = a.n | 0; need(n > 0, 'Укажи сумму');
       need(loanTotal(p) > 0, 'Кредитов нет'); need(p.cash >= n, 'Не хватает наличных');
       let left = n;
+      const bankBefore = p.loans.filter(l => !l.shady).reduce((x, l) => x + l.amt, 0);
       for (const l of [...p.loans].sort((x, y) => y.rate - x.rate)) { const x = Math.min(left, l.amt); l.amt -= x; left -= x; if (!left) break; }
       p.cash -= n - left; p.loans = p.loans.filter(l => l.amt > 0);
+      const bankAfter = p.loans.filter(l => !l.shady).reduce((x, l) => x + l.amt, 0);
+      if (bankBefore > bankAfter) { const k = bankAfter / bankBefore; p.assets.forEach(a => { if (a.loan) a.loan = Math.round(a.loan * k); }); }
       return;
     }
     case 'dream': {
@@ -235,14 +255,14 @@ function payday(s, p, ev) {
   const f = cashflow(s, p);
   if (f >= 0) p.cash += f; else if (!pay(s, p, -f, ev)) return false;
   for (const a of p.assets.filter(x => x.risk)) {
-    if (rnd(s) < a.risk * R.riskK * diff(s).risk) {
+    if (rnd(s) < a.risk * R.riskK * diff(s).risk * (has(p, 'risk') ? 0.5 : 1)) {
       p.assets = p.assets.filter(x => x !== a);
       sys(s, `💥 У игрока ${p.name}: ${a.e} ${a.n} прогорел(а), −${money(a.flow)}/мес`);
       toast(ev, p.id, `💥 ${a.n} прогорел(а)!`);
     }
   }
   if (rnd(s) < diff(s).surprise) {
-    const x = pick(s, D.SURPRISE), cost = scaleCost(s, p, x[2]);
+    const x = pick(s, D.SURPRISE), cost = Math.round(scaleCost(s, p, x[2]) * (has(p, 'risk') ? 0.5 : 1) / 50) * 50;
     toast(ev, p.id, `${x[0]} Внезапно: ${x[1]} −${money(cost)}`);
     if (!p.bot) sys(s, `${x[0]} Внезапная трата: ${x[1]} (${money(cost)})`);
     if (!pay(s, p, cost, ev)) return false;
@@ -252,8 +272,8 @@ function payday(s, p, ev) {
 
 function resolve(s, p, ev) {
   const t = D.CELLS[p.pos];
-  if (t.startsWith('g_')) {
-    const g = D.GAMBLES.find(x => 'g_' + x.id === t), sc = profScale(p);
+  if (t === 'gamble') {
+    const g = pick(s, D.GAMBLES), sc = profScale(p);
     s.card = { kind: 'gamble', g, stake: Math.round(g.stake * sc / 100) * 100, scale: sc, tier: 'rat', result: null };
     s.phase = 'card'; return;
   }
@@ -264,7 +284,7 @@ function resolve(s, p, ev) {
       if (base.t === 'stock') {
         s.card = { kind: 'stock', tk: base.tk, price: Math.max(0.01, Math.round(s.prices[base.tk].p * R.brokerDiscount * 100) / 100) };
       } else {
-        const deal = Object.assign({}, base, { flow: Math.max(10, r10(base.flow * diff(s).flow)) });
+        const deal = Object.assign({}, base, { flow: Math.max(10, r10(base.flow * diff(s).flow * yieldK(s))), down: nego(p, base.down), nego: has(p, 'negotiation') });
         s.card = { kind: 'deal', deal, big: t === 'big' };
       }
       break;
@@ -294,7 +314,7 @@ function resolve(s, p, ev) {
     case 'charity': s.card = { kind: 'charity', cost: Math.round(p.salary * R.charityShare) }; break;
     case 'sbiz': {
       const base = pick(s, D.SBIZ);
-      s.card = { kind: 'deal', deal: Object.assign({}, base, { flow: Math.max(10, r10(base.flow * diff(s).flow)) }), big: false, tier: 'sbiz' };
+      s.card = { kind: 'deal', deal: Object.assign({}, base, { flow: Math.max(10, r10(base.flow * diff(s).flow * yieldK(s))), down: nego(p, base.down), nego: has(p, 'negotiation') }), big: false, tier: 'sbiz' };
       break;
     }
     case 'gig': {
@@ -312,17 +332,12 @@ function resolve(s, p, ev) {
 
 function resolveMid(s, p, ev) {
   const t = D.MCELLS[p.pos], m = midF(s, p);
-  if (t.startsWith('mg_')) {
-    const g = D.MGAMBLES.find(x => 'mg_' + x.id === t);
-    s.card = { kind: 'gamble', g, stake: r1000(g.stakeF * m), scale: m, tier: 'mid', result: null };
-    s.phase = 'card'; return;
-  }
   switch (t) {
     case 'mpay': toast(ev, p.id, `💼 Прибыль: ${money(cashflow(s, p))}`); return endTurn(s, p, ev);
     case 'mbiz': {
       const b = pick(s, D.MBIZ);
       const down = r1000(b.downF * m * (0.9 + rnd(s) * 0.2));
-      const deal = Object.assign({}, b, { t: 'biz', cat: 'mbiz', price: r1000(down * 2.5), down, flow: Math.max(10, r100(b.flowF * m * diff(s).flow)) });
+      const deal = Object.assign({}, b, { t: 'biz', cat: 'mbiz', price: r1000(down * 2.5), down: nego(p, down), nego: has(p, 'negotiation'), flow: Math.max(10, r100(b.flowF * m * diff(s).flow * yieldK(s))) });
       s.card = { kind: 'deal', deal, big: false, tier: 'mid' };
       break;
     }
@@ -384,8 +399,9 @@ function resolveMevent(s, p, ev, m) {
 function doGamble(s, p, c, ev) {
   need(p.cash >= c.stake, 'Не хватает денег на вход');
   p.cash -= c.stake;
-  const die = ri(s, 1, 6), o = c.g.out[die - 1], k = c.tier === 'mid' ? 1 : 1000; // малый круг: тысячи $, средний: месячные потоки
-  const res = { die, o, prize: 0, lost: 0, debt: 0 };
+  const raw = ri(s, 1, 6), die = Math.min(6, raw + (has(p, 'critical') ? 1 : 0));
+  const o = c.g.out[die - 1], k = c.tier === 'mid' ? 1 : 1000; // малый круг: тысячи $, средний: месячные потоки
+  const res = { die, raw, o, prize: 0, lost: 0, debt: 0 };
   if (o === 'win') { res.prize = Math.round(ri(s, c.g.win[0], c.g.win[1]) * k * c.scale / 500) * 500; p.cash += c.stake + res.prize; }
   else if (o === 'even') p.cash += c.stake;
   else if (o === 'zero' || o === 'debt') { res.lost = p.cash + c.stake; p.cash = 0; }
@@ -478,11 +494,13 @@ function doBuy(s, p, a, ev) {
     need(L % 1000 === 0, 'Кредит выдаётся по $1000');
     if (L) need(canBorrow(s, p, L), 'Банк отказал: поток слишком маленький');
     need(p.cash + L >= d.down, 'Не хватает денег');
+    const rate = rateFor(s, p), payL = Math.round(L * rate);
     if (L) borrow(s, p, L);
     p.cash -= d.down;
-    p.assets.push(Object.assign({}, d, { id: ++s.uid }));
+    p.assets.push(Object.assign({}, d, { id: ++s.uid }, L ? { loan: L, loanRate: rate } : {}));
     say(s, p.id, `Купил(а) <b>${d.n}</b>${L ? ` в кредит ${money(L)}` : ''} 💪 +${money(d.flow)}/мес`);
-    toast(ev, p.id, `${d.e} Куплено! Поток +${money(d.flow)}${L ? `, платёж по кредиту ${money(L * s.rate)}` : ''}`);
+    if (L && payL > d.flow) toast(ev, p.id, `⚠️ ${d.n}: платёж банку ${money(payL)} больше дохода ${money(d.flow)}. Бизнес в минусе на ${money(payL - d.flow)}/мес из-за кредита`);
+    else toast(ev, p.id, `${d.e} Куплено! Поток +${money(d.flow)}${L ? `, платёж по кредиту ${money(payL)} → чистыми ${money(d.flow - payL)}` : ''}`);
     return finishCard(s, p, ev);
   }
   if (c.kind === 'charity') {
@@ -566,7 +584,8 @@ function doInfluence(s, p, a, ev, myTurn) {
     toast(ev, p.id, `⚖️ ФАС заметила манипуляцию! Штраф ${money(fine)}`);
     return;
   }
-  const n = { id: ++s.uid, t: up ? `В чатах пишут, что ${a.tk} ждёт крупный контракт` : `Анонимный канал: у ${a.tk} серьёзные проблемы с отчётностью`, rum: true, tick: s.tick, status: '', manip: p.id };
+  const n = { id: ++s.uid, t: up ? `В чатах пишут, что ${a.tk} ждёт крупный контракт` : `Анонимный канал: у ${a.tk} серьёзные проблемы с отчётностью`, rum: true, tick: s.tick, status: '', manip: p.id,
+    fx: [{ tk: a.tk, m: up ? R.pumpEffect : -R.pumpEffect }], hint: rnd(s) < R.analystAccuracy };
   s.pend.push({ tk: a.tk, m: up ? R.pumpEffect : -R.pumpEffect, real: true, nid: n.id, i: 0 });
   s.news.push(n); if (s.news.length > 20) s.news.shift();
   log(s, { k: 'news', text: n.t, rum: true });
@@ -648,8 +667,9 @@ function win(s, p, how) {
 
 /* ---------- деньги ---------- */
 function borrow(s, p, n) {
-  const l = p.loans.find(x => x.rate === s.rate && !x.shady);
-  if (l) l.amt += n; else p.loans.push({ amt: n, rate: s.rate });
+  const rate = rateFor(s, p);
+  const l = p.loans.find(x => x.rate === rate && !x.shady);
+  if (l) l.amt += n; else p.loans.push({ amt: n, rate });
   p.cash += n;
 }
 function pay(s, p, n, ev) {
@@ -657,7 +677,7 @@ function pay(s, p, n, ev) {
   const needL = Math.ceil((n - p.cash) / 1000) * 1000;
   if (canBorrow(s, p, needL)) {
     borrow(s, p, needL); p.cash -= n;
-    toast(ev, p.id, `Не хватило денег: банк выдал кредит ${money(needL)} под ${pct(s.rate)}`);
+    toast(ev, p.id, `Не хватило денег: банк выдал кредит ${money(needL)} под ${pct(rateFor(s, p))}`);
     return true;
   }
   const sold = [];
@@ -718,6 +738,8 @@ function genNews(s) {
   else if (tpl.macro === 'bull') for (const tk in D.TICK) eff.push({ tk, m: 0.1 });
   else eff.push({ tk: tpl.tk, m: tpl.m, div: tpl.div });
   eff.forEach(e => s.pend.push(Object.assign({}, e, { real, nid: n.id, i: 0 })));
+  n.fx = eff.map(e => ({ tk: e.tk, m: e.m, div: e.div }));
+  if (n.rum) n.hint = (rnd(s) < R.analystAccuracy) === real; // мнение аналитика: правда ли слух
   s.news.push(n); if (s.news.length > 20) s.news.shift();
   log(s, { k: 'news', text: n.t, rum: n.rum });
   const bots = s.players.filter(q => q.bot && !q.bankrupt);
@@ -737,7 +759,7 @@ function aiDeal(s, p, d) {
   const eff = d.flow * (1 - (d.risk || 0) * 0.8);
   if (p.cash - d.down >= reserve) return { loan: 0 };
   const L = Math.ceil((d.down - Math.max(0, p.cash - reserve)) / 1000) * 1000;
-  if (L > 0 && canBorrow(s, p, L) && eff - L * s.rate > eff * 0.3 && p.cash + L >= d.down) return { loan: L };
+  if (L > 0 && canBorrow(s, p, L) && eff - L * rateFor(s, p) > eff * 0.3 && p.cash + L >= d.down) return { loan: L };
   if (p.cash >= d.down && eff > 0) return { loan: 0 };
   return null;
 }
@@ -747,6 +769,7 @@ function botAction(s) {
   if (!p || !p.bot) return null;
   if (s.phase === 'exit') return { type: 'dream', pid, i: [1, 0, 2][pid % 3] };
   if (s.phase === 'roll') {
+    if (p.mode !== 'fast') for (const sk of ['negotiation', 'risk', 'credit']) if (!has(p, sk) && p.cash > skillCost(s, p, sk) * 4) return { type: 'study', pid, skill: sk };
     if (p.mode !== 'fast') for (const o of s.offers) if (o.from !== pid && (o.mode || 'rat') === p.mode && aiDeal(s, p, o.deal)) return { type: 'takeOffer', pid, id: o.id };
     return { type: 'roll', pid };
   }
@@ -785,7 +808,7 @@ function botAction(s) {
 const KolesoEngine = {
   newGame, act, botAction, actorId, D,
   calc: { passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, scaleCost,
-          midF, midProgress, cap, takeoverCost, takeoverFlow, influenceCost },
+          midF, midProgress, cap, has, rateFor, skillCost, takeoverCost, takeoverFlow, influenceCost },
   fmt: { money, pct, fmtP },
 };
 if (typeof module === 'object' && module.exports) module.exports = KolesoEngine;
