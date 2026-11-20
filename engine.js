@@ -25,7 +25,7 @@ const pick = (s, arr) => arr[Math.floor(rnd(s) * arr.length)];
 const r10 = n => Math.round(n / 10) * 10, r100 = n => Math.round(n / 100) * 100, r1000 = n => Math.round(n / 1000) * 1000;
 const money = n => (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString('ru-RU');
 const pct = r => (r * 100).toFixed(1).replace('.', ',') + '%';
-const fmtP = p => '$' + (p < 10 ? p.toFixed(2) : p.toFixed(1)).replace('.', ',');
+const fmtP = p => '$' + (p < 0.01 ? p.toFixed(5) : p < 1 ? p.toFixed(3) : p < 10 ? p.toFixed(2) : p.toFixed(1)).replace('.', ',');
 
 class RuleError extends Error {}
 const need = (cond, msg) => { if (!cond) throw new RuleError(msg); };
@@ -43,7 +43,16 @@ const has = (p, sk) => !!(p.skills && p.skills.includes(sk));
 const rateFor = (s, p) => Math.max(0.01, Math.round((s.rate - (has(p, 'credit') ? R.creditBonus : 0)) * 1000) / 1000);
 const canBorrow = (s, p, n) => p.mode !== 'fast' && (diff(s).minF === null || cashflow(s, p) - n * rateFor(s, p) >= p.salary * diff(s).minF);
 const skillCost = (s, p, sk) => scaleCost(s, p, D.SKILLS.find(x => x.id === sk).cost);
+// Масштаб сделок малого круга: чем больше у профессии расходы, тем крупнее ей предлагают сделки
+const dealScale = p => Math.max(1, p.exp.reduce((x, e) => x + e[1], 0) / R.dealScaleBase);
+const scaleDeal = (s, p, base) => {
+  const k = dealScale(p), r = k > 1.05 ? r100 : (x => x);
+  return Object.assign({}, base, { price: r(base.price * k), down: nego(p, r(base.down * k)), nego: has(p, 'negotiation'),
+    flow: Math.max(10, r10(base.flow * k * diff(s).flow * yieldK(s))) });
+};
 const yieldK = s => R.yieldSpread[0] + rnd(s) * (R.yieldSpread[1] - R.yieldSpread[0]);
+const perk = (p, k) => !!(p.perks && p.perks.includes(k));
+const thrift = (p, v) => perk(p, 'thrift') ? Math.round(v * 0.7 / 50) * 50 : v;
 const nego = (p, down) => has(p, 'negotiation') ? r100(down * R.negoDiscount) : down;
 function maxLoan(s, p) { if (diff(s).minF === null) return Infinity; let n = 0; while (canBorrow(s, p, n + 1000) && n < 1e7) n += 1000; return n; }
 const fTarget = p => Math.round(p.fstart * R.fastTarget);
@@ -51,11 +60,15 @@ const fProgress = (s, p) => Math.max(0, Math.min(100, Math.round(Math.max(p.cash
 const profScale = p => 0.75 + p.salary / 12000;
 const scaleCost = (s, p, c) => Math.round(c * profScale(p) * diff(s).tempt / 50) * 50;
 const midF = (s, p) => Math.max(1000, cashflow(s, p));
+// Доходность бизнесов среднего круга для игрока: ln(путь до цели) / ln(эталон). Курьеру расти дальше, чем врачу, — его бизнесы доходнее.
+const midYield = p => { const M = Math.max(2, R.fastFlow / Math.max(1000, p.mstart)); return Math.min(1.6, Math.max(0.4, Math.log(M) / Math.log(R.midRefM))); };
 const cap = (s, tk) => s.prices[tk].p * D.TICK[tk].shares;
 const takeoverCost = (s, tk, disc) => Math.round(cap(s, tk) * R.takeoverShare * (disc || 1) / 1000) * 1000;
 const takeoverFlow = (s, tk) => Math.round(cap(s, tk) * R.takeoverShare * R.takeoverYield / 100) * 100;
 const influenceCost = (s, p, tk) => Math.round(cap(s, tk) * R.pumpCost * (s.prices[tk].owner === p.id ? 0.5 : 1) / 1000) * 1000;
 const fee = v => Math.max(R.feeMin, Math.round(v * R.fee));
+const feeFor = (tk, v) => Math.max(R.feeMin, Math.round(v * (D.TICK[tk].fee || R.fee)));
+function gauss(s) { const u = Math.max(1e-9, rnd(s)), v = rnd(s); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
 // прогресс среднего круга в логарифмах: путь от потока при входе до $100 000
 const midProgress = (s, p) => { const f0 = Math.max(1000, p.mstart), f = Math.max(1, cashflow(s, p)); return Math.max(0, Math.min(100, Math.round(Math.log(f / f0) / Math.log(R.fastFlow / f0) * 100))); };
 const progress = (s, p) => p.mode === 'fast' ? fProgress(s, p) : p.mode === 'mid' ? midProgress(s, p) : freedom(s, p);
@@ -71,13 +84,13 @@ function makePlayer(id, profId, o) {
   const P = D.PROFS.find(x => x.id === profId);
   return { id, name: o.name, emoji: o.emoji || P.e, color: o.color, bot: !!o.bot, prof: P.id, profName: P.n,
     salary: P.salary, child: P.child, exp: P.exp.map(e => [e[0], e[1]]), cash: P.cash, children: 0, loans: [], assets: [],
-    pos: 0, skip: 0, charity: 0, turns: 0, skills: [], mode: 'rat', mstart: 0, midAt: 0, fastAt: 0, infTick: -1, fflow: 0, fstart: 0, finv: [], dream: null, dreamCost: 0, bankrupt: false };
+    pos: 0, skip: 0, charity: 0, turns: 0, skills: (P.skills || []).slice(), perks: (P.perks || []).slice(), mode: 'rat', mstart: 0, midAt: 0, fastAt: 0, infTick: -1, fflow: 0, fstart: 0, finv: [], dream: null, dreamCost: 0, bankrupt: false };
 }
 function newGame(opt) {
   const seed = (opt.seed == null ? Date.now() : opt.seed) | 0;
-  const s = { v: 2, diff: opt.diff || 'normal', rng: seed, tick: 0, cur: 0, phase: 'roll', card: null, exitPid: null, result: null,
+  const s = { v: 3, diff: opt.diff || 'normal', rng: seed, tick: 0, cur: 0, phase: 'roll', card: null, exitPid: null, result: null,
     rate: R.startRate, pend: [], news: [], offers: [], log: [], uid: 0, players: [],
-    prices: Object.fromEntries(Object.entries(D.TICK).map(([k, v]) => [k, { p: v.p, div: v.div, prev: v.p, hist: [v.p] }])) };
+    prices: Object.fromEntries(Object.entries(D.TICK).map(([k, v]) => [k, { p: v.p, fv: v.p, div: v.div, prev: v.p, hist: [v.p] }])) };
   s.players.push(makePlayer(0, opt.prof, { name: opt.name || 'Ты', color: '#2ea6ff', bot: !!opt.allBots }));
   D.BOTS.forEach((b, i) => s.players.push(makePlayer(i + 1, b.prof, Object.assign({}, b, { bot: true }))));
   sys(s, `🎡 Партия началась · сложность «${diff(s).n}» · ${s.players.length} игрока`);
@@ -139,7 +152,7 @@ function handle(s, a, ev) {
     case 'buyStock': {
       need(s.phase === 'card' && myTurn && c && c.kind === 'stock', 'Нет предложения брокера');
       const qty = a.qty | 0; need(qty > 0, 'Укажи количество');
-      const total = qty * c.price, f = fee(total);
+      const total = qty * c.price, f = feeFor(c.tk, total);
       need(total + f <= p.cash, 'Не хватает денег');
       p.cash -= total + f; addShares(s, p, c.tk, qty, c.price);
       say(s, pid, `Взял(а) у брокера ${qty} ${c.tk} по ${fmtP(c.price)}`);
@@ -170,7 +183,7 @@ function handle(s, a, ev) {
     case 'takeover': {
       need(p.mode === 'fast', 'Выкупать компании можно только в Большой игре');
       need(s.phase === 'roll' && myTurn, 'Выкуп — в свой ход до броска');
-      need(s.prices[a.tk], 'Нет такой компании');
+      need(s.prices[a.tk] && !D.TICK[a.tk].crypto, 'Крипту выкупить нельзя: это не компания');
       return doTakeover(s, p, a.tk, takeoverCost(s, a.tk), takeoverFlow(s, a.tk));
     }
     case 'pump': case 'dump':
@@ -262,7 +275,7 @@ function payday(s, p, ev) {
     }
   }
   if (rnd(s) < diff(s).surprise) {
-    const x = pick(s, D.SURPRISE), cost = Math.round(scaleCost(s, p, x[2]) * (has(p, 'risk') ? 0.5 : 1) / 50) * 50;
+    const x = pick(s, D.SURPRISE), cost = thrift(p, Math.round(scaleCost(s, p, x[2]) * (has(p, 'risk') ? 0.5 : 1) / 50) * 50);
     toast(ev, p.id, `${x[0]} Внезапно: ${x[1]} −${money(cost)}`);
     if (!p.bot) sys(s, `${x[0]} Внезапная трата: ${x[1]} (${money(cost)})`);
     if (!pay(s, p, cost, ev)) return false;
@@ -282,16 +295,16 @@ function resolve(s, p, ev) {
     case 'small': case 'big': {
       const base = pick(s, t === 'small' ? D.SMALL : D.BIG);
       if (base.t === 'stock') {
-        s.card = { kind: 'stock', tk: base.tk, price: Math.max(0.01, Math.round(s.prices[base.tk].p * R.brokerDiscount * 100) / 100) };
+        const tk = base.tk || pick(s, Object.keys(D.TICK)), pr = s.prices[tk].p * R.brokerDiscount;
+        s.card = { kind: 'stock', tk, price: D.TICK[tk].crypto ? Math.max(R.cryptoMin, Math.round(pr * 1e6) / 1e6) : Math.max(0.01, Math.round(pr * 100) / 100) };
       } else {
-        const deal = Object.assign({}, base, { flow: Math.max(10, r10(base.flow * diff(s).flow * yieldK(s))), down: nego(p, base.down), nego: has(p, 'negotiation') });
-        s.card = { kind: 'deal', deal, big: t === 'big' };
+        s.card = { kind: 'deal', deal: scaleDeal(s, p, base), big: t === 'big' };
       }
       break;
     }
     case 'market': return resolveMarket(s, p, ev);
     case 'tempt': {
-      const x = pick(s, D.TEMPT), cost = scaleCost(s, p, x.cost);
+      const x = pick(s, D.TEMPT), cost = thrift(p, scaleCost(s, p, x.cost));
       if (!pay(s, p, cost, ev)) return afterBankrupt(s, p);
       if (p.bot && rnd(s) < 0.5) say(s, p.id, `Соблазн: ${x.n} 🤦 −${money(cost)}`);
       s.card = { kind: 'tempt', t: x, cost };
@@ -304,21 +317,21 @@ function resolve(s, p, ev) {
       break;
     }
     case 'down': {
-      const paid = expenses(s, p);
+      const nf = perk(p, 'nofire'), paid = nf ? Math.round(expenses(s, p) / 2) : expenses(s, p);
       if (!pay(s, p, paid, ev)) return afterBankrupt(s, p);
-      p.skip = 2;
+      p.skip = nf ? 0 : 2;
       if (p.bot) say(s, p.id, 'Уволили, пропускаю два хода 😩');
-      s.card = { kind: 'down', paid };
+      s.card = { kind: 'down', paid, nofire: nf };
       break;
     }
     case 'charity': s.card = { kind: 'charity', cost: Math.round(p.salary * R.charityShare) }; break;
     case 'sbiz': {
       const base = pick(s, D.SBIZ);
-      s.card = { kind: 'deal', deal: Object.assign({}, base, { flow: Math.max(10, r10(base.flow * diff(s).flow * yieldK(s))), down: nego(p, base.down), nego: has(p, 'negotiation') }), big: false, tier: 'sbiz' };
+      s.card = { kind: 'deal', deal: scaleDeal(s, p, base), big: false, tier: 'sbiz' };
       break;
     }
     case 'gig': {
-      const amt = r10(p.salary * (R.gigShare[0] + rnd(s) * (R.gigShare[1] - R.gigShare[0])));
+      const amt = r10(p.salary * (R.gigShare[0] + rnd(s) * (R.gigShare[1] - R.gigShare[0])) * (perk(p, 'gig2') ? 2 : 1));
       p.cash += amt;
       s.card = { kind: 'gig', amt };
       break;
@@ -337,7 +350,7 @@ function resolveMid(s, p, ev) {
     case 'mbiz': {
       const b = pick(s, D.MBIZ);
       const down = r1000(b.downF * m * (0.9 + rnd(s) * 0.2));
-      const deal = Object.assign({}, b, { t: 'biz', cat: 'mbiz', price: r1000(down * 2.5), down: nego(p, down), nego: has(p, 'negotiation'), flow: Math.max(10, r100(b.flowF * m * diff(s).flow * yieldK(s))) });
+      const deal = Object.assign({}, b, { t: 'biz', cat: 'mbiz', price: r1000(down * 2.5), down: nego(p, down), nego: has(p, 'negotiation'), flow: Math.max(10, r100(b.flowF * m * midYield(p) * diff(s).flow * yieldK(s))) });
       s.card = { kind: 'deal', deal, big: false, tier: 'mid' };
       break;
     }
@@ -348,7 +361,7 @@ function resolveMid(s, p, ev) {
       break;
     }
     case 'lux': {
-      const x = pick(s, D.LUX), cost = r100(x.costF * m * diff(s).tempt);
+      const x = pick(s, D.LUX), cost = thrift(p, r100(x.costF * m * diff(s).tempt));
       if (!pay(s, p, cost, ev)) return afterBankrupt(s, p);
       if (p.bot && rnd(s) < 0.5) say(s, p.id, `Не удержался(ась): ${x.n} 💸 −${money(cost)}`);
       s.card = { kind: 'tempt', t: x, cost, lux: true };
@@ -479,7 +492,7 @@ function resolveFast(s, p, ev) {
     if (own.length) { const x = pick(s, own); s.card = { kind: 'raid', inv: x, cost: r1000(x.flow * R.raidDefense) }; }
     else s.card = { kind: 'raid', inv: null };
   } else if (t === 'acq') {
-    const free = Object.keys(D.TICK).filter(tk => s.prices[tk].owner == null);
+    const free = Object.keys(D.TICK).filter(tk => s.prices[tk].owner == null && !D.TICK[tk].crypto);
     if (!free.length) { toast(ev, p.id, 'Все компании уже кем-то куплены'); return endTurn(s, p, ev); }
     const tk = pick(s, free);
     s.card = { kind: 'acq', tk, cost: takeoverCost(s, tk, R.acqDiscount), flow: takeoverFlow(s, tk) };
@@ -540,7 +553,7 @@ function doBuy(s, p, a, ev) {
 function doTrade(s, p, a, ev) {
   const q = s.prices[a.tk]; need(q, 'Нет такой бумаги');
   const qty = a.qty | 0; need(qty > 0, 'Укажи количество');
-  const total = qty * q.p, f = fee(total);
+  const total = qty * q.p, f = feeFor(a.tk, total);
   const own = p.assets.find(x => x.tk === a.tk);
   if (a.side === 'buy') {
     need(total + f <= p.cash, 'Не хватает денег');
@@ -704,10 +717,20 @@ function afterBankrupt(s, p) {
 
 /* ---------- биржа и новости ---------- */
 function marketTick(s) {
-  for (const tk in D.TICK) { const q = s.prices[tk]; q.prev = q.p; q.p *= 1 + (rnd(s) * 2 - 1) * D.TICK[tk].vol; }
+  for (const tk in D.TICK) {
+    const T = D.TICK[tk], q = s.prices[tk]; q.prev = q.p;
+    if (q.fv == null) q.fv = T.p;
+    if (T.crypto) q.p *= Math.exp(T.drift + T.vol * gauss(s)); // случайное блуждание с отрицательным дрейфом
+    else {
+      q.fv *= 1 + R.fvGrowth;
+      q.p *= 1 + (rnd(s) * 2 - 1) * T.vol;
+      q.p += (q.fv - q.p) * R.reversion;
+    }
+  }
   for (const e of s.pend) {
-    const q = s.prices[e.tk], k = e.real ? e.m : R.fakeEffect * e.m;
-    q.p *= 1 + k * R.newsSteps[e.i];
+    const T = D.TICK[e.tk], q = s.prices[e.tk], k = e.real ? e.m : R.fakeEffect * e.m, step = R.newsSteps[e.i];
+    q.p *= Math.max(0.05, 1 + k * step);
+    if (e.real && !T.crypto) q.fv *= Math.max(0.3, 1 + e.m * step * R.fvNewsShare);
     if (e.i === 0 && e.div && e.real) q.div = Math.round(q.div * e.div * 100) / 100;
     e.i++;
     if (e.i >= R.newsSteps.length) {
@@ -717,8 +740,9 @@ function marketTick(s) {
   }
   s.pend = s.pend.filter(e => e.i < R.newsSteps.length);
   for (const tk in D.TICK) {
-    const q = s.prices[tk];
-    q.p = Math.max(D.TICK[tk].min, Math.round(q.p * 100) / 100);
+    const T = D.TICK[tk], q = s.prices[tk];
+    if (T.crypto) q.p = Math.max(R.cryptoMin, Math.round(q.p * 1e6) / 1e6);
+    else q.p = Math.round(Math.min(q.fv * R.stockCeil, Math.max(q.fv * R.stockFloor, q.p)) * 100) / 100;
     q.hist.push(q.p); if (q.hist.length > 24) q.hist.shift();
   }
 }
@@ -734,8 +758,9 @@ function genNews(s) {
     n.t += ` (${pct(old)} → ${pct(s.rate)})`;
     n.status = '✔ ставка уже изменилась, акции отреагируют';
     eff.push({ tk: 'ОКТО', m: up ? -0.12 : 0.12 }, { tk: 'ГРАН', m: up ? 0.06 : -0.04 });
-  } else if (tpl.macro === 'bear') for (const tk in D.TICK) eff.push({ tk, m: -0.15 });
-  else if (tpl.macro === 'bull') for (const tk in D.TICK) eff.push({ tk, m: 0.1 });
+  } else if (tpl.macro === 'bear') { for (const tk in D.TICK) if (!D.TICK[tk].crypto) eff.push({ tk, m: -0.15 }); }
+  else if (tpl.macro === 'bull') { for (const tk in D.TICK) if (!D.TICK[tk].crypto) eff.push({ tk, m: 0.1 }); }
+  else if (tpl.fx) tpl.fx.forEach(f => eff.push({ tk: f.tk, m: f.m }));
   else eff.push({ tk: tpl.tk, m: tpl.m, div: tpl.div });
   eff.forEach(e => s.pend.push(Object.assign({}, e, { real, nid: n.id, i: 0 })));
   n.fx = eff.map(e => ({ tk: e.tk, m: e.m, div: e.div }));
@@ -744,7 +769,7 @@ function genNews(s) {
   log(s, { k: 'news', text: n.t, rum: n.rum });
   const bots = s.players.filter(q => q.bot && !q.bankrupt);
   if (bots.length && rnd(s) < 0.4) {
-    const b = pick(s, bots), tk = tpl.tk || 'ОКТО', pos = (tpl.m || (tpl.macro === 'bull' ? 1 : -1)) > 0;
+    const b = pick(s, bots), tk = tpl.tk || (tpl.fx && tpl.fx[0].tk) || 'ОКТО', pos = (tpl.m || (tpl.fx && tpl.fx[0].m) || (tpl.macro === 'bull' ? 1 : -1)) > 0;
     say(s, b.id, n.rum ? pick(s, ['Это фейк, 100%', 'Верю. Беру на всё 🚀', 'Слух уже в цене, поздно', 'Подожду подтверждения'])
       : pos ? pick(s, [`Закупаюсь ${tk} 🚀`, `Наконец-то хорошие новости по ${tk}`]) : pick(s, [`Сливаю ${tk}, пока не поздно`, `Мои ${tk}... 😭`]));
   }
@@ -807,7 +832,7 @@ function botAction(s) {
 
 const KolesoEngine = {
   newGame, act, botAction, actorId, D,
-  calc: { passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, scaleCost,
+  calc: { passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
           midF, midProgress, cap, has, rateFor, skillCost, takeoverCost, takeoverFlow, influenceCost },
   fmt: { money, pct, fmtP },
 };
