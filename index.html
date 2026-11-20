@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Колесо</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+  <div class="tg-top">
+    <button class="x" onclick="UI.toast('В Telegram здесь закрывается мини-приложение')">✕ Закрыть</button>
+    <div class="title">Колесо<small>мини-приложение</small></div>
+    <button class="dots" onclick="UI.toast('Меню мини-приложения')">⋯</button>
+  </div>
+
+  <!-- СТАРТ -->
+  <div class="screen" id="scrStart">
+    <div class="start">
+      <div class="logo">🐹🎡</div>
+      <h1>Выберись из колеса</h1>
+      <p class="sub">Собери пассивный доход больше расходов, затем в Большой игре купи мечту раньше Ани и Макса.</p>
+      <div id="contBox"></div>
+      <div class="lbl">Сложность</div>
+      <div class="seg" id="diffSeg"></div>
+      <div class="diffnote" id="diffNote"></div>
+      <div class="lbl">Профессия</div>
+      <div id="profList"></div>
+      <div class="howto">
+        <b>Этап 1. Колесо.</b> Покупай активы, пока пассивный доход не покроет расходы. Мешают инфляция, внезапные траты, соблазны и прогорающие бизнесы. Кредит помогает, но платёж по нему съедает поток. Считай, выгодно ли брать. Если банк откажет, активы распродадут за полцены.<br><br>
+        <b>Биржа.</b> Новости двигают цены за два следующих броска. Успей купить или продать до них. Слухи сбываются не всегда.<br><br>
+        <b>Этап 2. Большая игра.</b> Кредитов нет. Инвестируй, рискуй в венчуре и купи мечту на её клетке (или подними поток на 50%). <b>Кто первым это сделает, тот и выиграл.</b>
+      </div>
+      <button class="testlink" onclick="UI.debugFast()">🧪 Тест: начать сразу с Большой игры</button>
+    </div>
+  </div>
+
+  <!-- ИГРА -->
+  <div class="screen hidden" id="scrGame">
+    <div class="hud">
+      <div class="hud-row">
+        <div class="ava" id="hAva">🛵</div>
+        <div class="who"><b id="hProf"></b><span id="hMode"></span><br>Ход <span id="hTurn">0</span> · <span id="hDiff"></span></div>
+        <div class="stat" id="cashBox"><div class="v" id="hCash">$0</div><div class="l">наличные</div></div>
+        <div class="stat stat2"><div class="v" id="hFlow">$0</div><div class="l" id="hFlowL">поток / мес</div></div>
+      </div>
+      <div class="free">
+        <div class="free-top"><span id="hGoalTxt"></span><b id="hPct">0%</b></div>
+        <div class="bar"><i id="hBar" style="width:0%"></i></div>
+        <div class="free-sub" id="hGoalSub"></div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-v="board">Поле</button>
+      <button class="tab" data-v="ex">Биржа <span class="badge hidden" id="exbadge">0</span></button>
+      <button class="tab" data-v="report">Отчёт</button>
+      <button class="tab" data-v="chat">Чат <span class="badge hidden" id="badge">0</span></button>
+    </div>
+    <div class="view" id="v-board">
+      <div class="newsbar" id="newsbar" onclick="UI.switchView('ex')"></div>
+      <div class="board-wrap">
+        <div class="board" id="board">
+          <div class="center">
+            <div class="ctitle" id="cTitle">Колесо</div>
+            <div class="dice" id="dice">🎲</div>
+            <div class="lastmsg" id="lastMsg"></div>
+            <div class="race" id="race"></div>
+          </div>
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="view hidden" id="v-ex"><div class="ex" id="ex"></div></div>
+    <div class="view hidden" id="v-report"><div class="rep" id="rep"></div></div>
+    <div class="view hidden" id="v-chat"><div class="chat" id="chat"></div></div>
+    <button class="mainbtn" id="rollBtn">🎲 Бросить кубик</button>
+  </div>
+
+  <div class="shade" id="shade"></div>
+  <div class="sheet" id="sheet"></div>
+  <div class="win hidden" id="win"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
