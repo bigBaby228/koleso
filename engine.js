@@ -158,10 +158,31 @@ function handle(s, a, ev) {
     }
     case 'pump': case 'dump':
       return doInfluence(s, p, a, ev, myTurn);
+    case 'expand': {
+      need(s.phase === 'card' && myTurn && c && c.kind === 'expand', 'Сейчас нечего расширять');
+      const o = c.opts.find(x => x.id === a.id); need(o && !c.done.includes(a.id), 'Этот бизнес уже расширен');
+      const as = p.assets.find(x => x.id === a.id); need(as, 'Бизнеса уже нет');
+      need(p.cash >= o.cost, 'Не хватает денег');
+      p.cash -= o.cost; as.flow += o.add; as.down += o.cost; c.done.push(a.id);
+      say(s, pid, `📐 Расширил(а) ${as.n}: поток +${money(o.add)}`);
+      return;
+    }
+    case 'media': {
+      need(s.phase === 'card' && myTurn && c && c.kind === 'media' && !c.used, 'Нет медиакампании');
+      need(s.prices[a.tk], 'Нет такой компании');
+      c.used = true;
+      const n = { id: ++s.uid, t: a.up ? `Телеканалы взахлёб хвалят ${a.tk}` : `Громкое расследование против ${a.tk} в прайм-тайм`, rum: false, tick: s.tick, status: '' };
+      s.pend.push({ tk: a.tk, m: a.up ? R.pumpEffect : -R.pumpEffect, real: true, nid: n.id, i: 0 });
+      s.news.push(n); if (s.news.length > 20) s.news.shift();
+      log(s, { k: 'news', text: n.t, rum: false });
+      toast(ev, pid, `📺 Сюжет вышел: ${a.tk} сдвинется на ${Math.round(R.pumpEffect * 100)}% за два броска`);
+      return finishCard(s, p, ev);
+    }
     case 'pass':
     case 'ok':
       need(s.phase === 'card' && myTurn && c, 'Нет активной карточки');
       if (c.kind === 'deal' && a.type === 'pass') makeOffer(s, p, c);
+      if (c.kind === 'raid' && c.inv) loseCompany(s, p, c.inv);
       return finishCard(s, p, ev);
     case 'trade': return doTrade(s, p, a, ev);
     case 'loan': {
@@ -231,6 +252,11 @@ function payday(s, p, ev) {
 
 function resolve(s, p, ev) {
   const t = D.CELLS[p.pos];
+  if (t.startsWith('g_')) {
+    const g = D.GAMBLES.find(x => 'g_' + x.id === t), sc = profScale(p);
+    s.card = { kind: 'gamble', g, stake: Math.round(g.stake * sc / 100) * 100, scale: sc, tier: 'rat', result: null };
+    s.phase = 'card'; return;
+  }
   switch (t) {
     case 'pay': toast(ev, p.id, `💼 Зарплата: ${money(cashflow(s, p))}`); return endTurn(s, p, ev);
     case 'small': case 'big': {
@@ -266,17 +292,31 @@ function resolve(s, p, ev) {
       break;
     }
     case 'charity': s.card = { kind: 'charity', cost: Math.round(p.salary * R.charityShare) }; break;
-    case 'gamble': {
-      const g = pick(s, D.GAMBLES), sc = profScale(p);
-      s.card = { kind: 'gamble', g, stake: Math.round(g.stake * sc / 100) * 100, scale: sc, tier: 'rat', result: null };
+    case 'sbiz': {
+      const base = pick(s, D.SBIZ);
+      s.card = { kind: 'deal', deal: Object.assign({}, base, { flow: Math.max(10, r10(base.flow * diff(s).flow)) }), big: false, tier: 'sbiz' };
       break;
     }
+    case 'gig': {
+      const amt = r10(p.salary * (R.gigShare[0] + rnd(s) * (R.gigShare[1] - R.gigShare[0])));
+      p.cash += amt;
+      s.card = { kind: 'gig', amt };
+      break;
+    }
+    case 'course':
+      s.card = { kind: 'course', cost: r100(p.salary * R.courseCost), raise: Math.max(10, r10(p.salary * R.courseRaise)) };
+      break;
   }
   s.phase = 'card';
 }
 
 function resolveMid(s, p, ev) {
   const t = D.MCELLS[p.pos], m = midF(s, p);
+  if (t.startsWith('mg_')) {
+    const g = D.MGAMBLES.find(x => 'mg_' + x.id === t);
+    s.card = { kind: 'gamble', g, stake: r1000(g.stakeF * m), scale: m, tier: 'mid', result: null };
+    s.phase = 'card'; return;
+  }
   switch (t) {
     case 'mpay': toast(ev, p.id, `💼 Прибыль: ${money(cashflow(s, p))}`); return endTurn(s, p, ev);
     case 'mbiz': {
@@ -304,6 +344,11 @@ function resolveMid(s, p, ev) {
       const added = p.children < R.maxChildren; if (added) p.children++;
       if (added) sys(s, `👶 У игрока ${p.name} родился ребёнок`);
       s.card = { kind: 'child', added };
+      break;
+    }
+    case 'expand': {
+      const opts = p.assets.filter(a => a.cat === 'mbiz').map(a => ({ id: a.id, cost: r100(a.down * R.expandCost), add: r10(a.flow * R.expandFlow) }));
+      s.card = { kind: 'expand', opts, done: [] };
       break;
     }
   }
@@ -407,6 +452,16 @@ function resolveFast(s, p, ev) {
       sys(s, `🌪 Кризис: у игрока ${p.name} разорился ${lost.n}`);
     }
     s.card = { kind: 'crisis', lost };
+  } else if (t === 'ipo') {
+    const cand = p.finv.filter(x => !x.tk);
+    if (cand.length) { const x = pick(s, cand), amt = r1000(x.flow * R.ipoMult); p.cash += amt; s.card = { kind: 'ipo', inv: x, amt }; say(s, p.id, `🔔 ${x.n} вышел(а) на IPO: +${money(amt)}`); }
+    else s.card = { kind: 'ipo', inv: null, amt: 0 };
+  } else if (t === 'media') {
+    s.card = { kind: 'media' };
+  } else if (t === 'raid') {
+    const own = p.finv.filter(x => x.tk);
+    if (own.length) { const x = pick(s, own); s.card = { kind: 'raid', inv: x, cost: r1000(x.flow * R.raidDefense) }; }
+    else s.card = { kind: 'raid', inv: null };
   } else if (t === 'acq') {
     const free = Object.keys(D.TICK).filter(tk => s.prices[tk].owner == null);
     if (!free.length) { toast(ev, p.id, 'Все компании уже кем-то куплены'); return endTurn(s, p, ev); }
@@ -439,6 +494,17 @@ function doBuy(s, p, a, ev) {
     need(p.cash >= c.inv.cost, 'Не хватает денег');
     p.cash -= c.inv.cost; p.fflow += c.inv.flow; p.finv.push({ e: c.inv.e, n: c.inv.n, flow: c.inv.flow });
     say(s, p.id, `★ Купил(а) <b>${c.inv.n}</b>, поток +${money(c.inv.flow)}`);
+    return finishCard(s, p, ev);
+  }
+  if (c.kind === 'course') {
+    need(p.cash >= c.cost, 'Не хватает денег на курсы');
+    p.cash -= c.cost; p.salary += c.raise;
+    say(s, p.id, `🎓 Прошёл(а) курсы: зарплата +${money(c.raise)}`);
+    return finishCard(s, p, ev);
+  }
+  if (c.kind === 'raid' && c.inv) {
+    need(p.cash >= c.cost, 'Не хватает денег на защиту');
+    p.cash -= c.cost; say(s, p.id, `🥷 Отбился(ась) от рейдеров за ${money(c.cost)}`);
     return finishCard(s, p, ev);
   }
   if (c.kind === 'acq') {
@@ -479,6 +545,11 @@ function doTakeover(s, p, tk, cost, flow) {
   s.pend.push({ tk, m: 0.1, real: true, nid: -1, i: 0 });
   say(s, p.id, `🏢 Выкупил(а) контрольный пакет <b>${tk}</b> за ${money(cost)}. Поток +${money(flow)}`);
   sys(s, `🏢 ${p.name} теперь владеет ${tk}`);
+}
+function loseCompany(s, p, x) {
+  p.finv = p.finv.filter(y => y.tk !== x.tk); p.fflow -= x.flow; // карточка хранит копию, сравниваем по тикеру
+  if (s.prices[x.tk] && s.prices[x.tk].owner === p.id) s.prices[x.tk].owner = null;
+  sys(s, `🥷 Рейдеры отобрали у игрока ${p.name} контроль над ${x.tk}. Поток −${money(x.flow)}`);
 }
 function doInfluence(s, p, a, ev, myTurn) {
   const up = a.type === 'pump', q = s.prices[a.tk];
@@ -694,6 +765,12 @@ function botAction(s) {
     case 'charity': return p.cash > c.cost * 4 ? { type: 'buy', pid } : { type: 'pass', pid };
     case 'invest': return p.cash >= c.inv.cost ? { type: 'buy', pid } : { type: 'pass', pid };
     case 'acq': return p.cash >= c.cost ? { type: 'buy', pid } : { type: 'pass', pid };
+    case 'course': return p.cash > c.cost * 2 ? { type: 'buy', pid } : { type: 'pass', pid };
+    case 'raid': return c.inv && p.cash >= c.cost ? { type: 'buy', pid } : { type: 'pass', pid };
+    case 'expand': {
+      const o = c.opts.find(x => !c.done.includes(x.id) && p.cash - x.cost >= scaleCost(s, p, R.botReserve));
+      return o ? { type: 'expand', pid, id: o.id } : { type: 'ok', pid };
+    }
     case 'gamble': return c.result ? { type: 'ok', pid } : ((p.turns % 5 === 0 && p.cash >= c.stake) ? { type: 'gamble', pid } : { type: 'pass', pid });
     case 'mevent': {
       if (c.sellable && c.mult >= 2.5) { const id = c.sellable.find(x => !c.sold.includes(x)); if (id) return { type: 'sell', pid, id }; }

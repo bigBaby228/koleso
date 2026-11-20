@@ -137,7 +137,7 @@ function animateRoll(e, cb) {
     }
   }, 70);
   function step(i) {
-    anim = { pid: e.pid, pos: (e.from + i + 1) % 24 }; renderTokens();
+    anim = { pid: e.pid, pos: (e.from + i + 1) % D.CELLS.length }; renderTokens();
     if (i + 1 < e.steps) setTimeout(() => step(i + 1), mine ? 150 : 80);
     else setTimeout(() => { anim = null; cb(); }, mine ? 250 : 150);
   }
@@ -211,7 +211,14 @@ function buildBoard() {
   $('legend').innerHTML = Object.values(T).map(c => `<span>${c.e} ${c.n}</span>`).join('');
   $('cTitle').textContent = fast ? '★ Большая игра' : mid ? '◆ Средний круг' : 'Колесо';
 }
-function cellRC(i) { if (i <= 6) return [1, i + 1]; if (i <= 12) return [i - 5, 7]; if (i <= 18) return [7, 7 - (i - 12)]; return [7 - (i - 18), 1]; }
+const SIDE = 9; // поле SIDE×SIDE, по краю 4×(SIDE−1) = 32 клетки
+function cellRC(i) {
+  const k = SIDE - 1;
+  if (i <= k) return [1, i + 1];
+  if (i <= 2 * k) return [i - k + 1, SIDE];
+  if (i <= 3 * k) return [SIDE, SIDE - (i - 2 * k)];
+  return [SIDE - (i - 3 * k), 1];
+}
 function renderTokens() {
   document.querySelectorAll('.tok').forEach(t => t.remove());
   document.querySelectorAll('.cell.here').forEach(c => c.classList.remove('here'));
@@ -427,7 +434,7 @@ function cardHTML(c) {
       const hint = D.DIFF[S.diff].hints
         ? `<div class="hint">💡 <b>Подсказка (лёгкий режим):</b> кредит ${money(L)} × ${pct(S.rate)} = платёж ${money(L * S.rate)}/мес против потока +${money(d.flow)}. Итог: <b class="${d.flow - L * S.rate >= 0 ? 'g' : 'r'}">${d.flow - L * S.rate >= 0 ? '+' : ''}${money(d.flow - L * S.rate)}/мес</b></div>`
         : `<div class="hint">🧮 <b>Посчитай сам:</b> платёж по кредиту = сумма × ${pct(S.rate)} каждый месяц. Если платёж больше потока сделки, кредит съест доход.</div>`;
-      return `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? '◆ Средний бизнес' : c.big ? '🏢 Крупная сделка' : '🏠 Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
+      return `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.tier === 'sbiz' ? '#5fc8e0' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? '◆ Средний бизнес' : c.tier === 'sbiz' ? '🏬 Малый бизнес' : c.big ? '🏢 Крупная сделка' : '🏠 Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
       <div class="sh-e">${d.e}</div><div class="sh-t">${d.n}</div><div class="sh-d">${d.d}</div>
       ${rowsHTML([['Стоимость', money(d.price)], ['Первый взнос', money(d.down)],
         ...(d.price > d.down ? [['Ипотека объекта (уже в потоке)', money(d.price - d.down)]] : []),
@@ -478,6 +485,40 @@ function cardHTML(c) {
       <div class="rows">${g.out.map((o, i) => `<div class="ln"><span class="s">${FACES[i]}</span><span>${names[o]}</span></div>`).join('')}</div>
       <div class="btns">${me.cash >= c.stake ? btn(`Зайти в темку за ${money(c.stake)}`, "UI.A('gamble')", 'warn') : btn(`Не хватает ${money(c.stake - me.cash)}`, '', '', true)}${btn('Не, я пас', "UI.A('pass')", 'sec')}</div>`;
     }
+    case 'gig':
+      return `<div class="kind" style="color:#7fd16a">🛠 Подработка</div><div class="sh-e">🛠</div><div class="sh-t">Подвернулась подработка</div>
+      <div class="sh-d">Выходные ушли на халтуру, зато деньги сразу на руки.</div>
+      ${rowsHTML([['Заработано', '+' + money(c.amt), 'g'], ['На руках', money(me.cash)]])}<div class="btns">${btn('Отлично 💪', "UI.A('ok')")}</div>`;
+    case 'course':
+      return `<div class="kind" style="color:#6ab3f3">🎓 Курсы</div><div class="sh-e">🎓</div><div class="sh-t">Повышение квалификации</div>
+      <div class="sh-d">Заплати сейчас, и зарплата вырастет навсегда. Окупится за ${Math.ceil(c.cost / c.raise)} зарплат.</div>
+      ${rowsHTML([['Стоимость', money(c.cost)], ['Прибавка к зарплате', '+' + money(c.raise) + '/мес', 'g'], ['На руках', money(me.cash)]])}
+      <div class="btns">${btn(`Учиться за ${money(c.cost)}`, "UI.A('buy')", '', me.cash < c.cost)}${btn('Некогда', "UI.A('pass')", 'sec')}</div>`;
+    case 'expand': {
+      const list = c.opts.map(o => { const a = me.assets.find(x => x.id === o.id); if (!a) return '';
+        const done = c.done.includes(o.id);
+        return `<div class="asset-sell"><span>${a.e} ${a.n}<br><small style="color:var(--hint)">поток ${money(a.flow)} → ${money(a.flow + (done ? 0 : o.add))}</small></span><button ${done || me.cash < o.cost ? 'disabled' : ''} onclick="UI.A('expand',{id:${o.id}})">${done ? 'Готово' : 'Вложить ' + money(o.cost)}</button></div>`; }).join('');
+      return `<div class="kind" style="color:#5fc8e0">📐 Расширение</div><div class="sh-e">📐</div><div class="sh-t">Можно расшириться</div>
+      <div class="sh-d">Новые точки, второй цех, больше машин. Вложись в любой свой бизнес, и его поток вырастет на ${Math.round(D.RULES.expandFlow * 100)}%.</div>
+      ${list ? `<div class="rows">${list}</div>` : '<div class="sh-d">У тебя пока нет бизнесов среднего круга.</div>'}
+      <div class="btns">${btn('Готово', "UI.A('ok')")}</div>`;
+    }
+    case 'ipo':
+      return `<div class="kind" style="color:#7fd16a">🔔 IPO</div><div class="sh-e">🔔</div>
+      ${c.inv ? `<div class="sh-t">${c.inv.e} ${c.inv.n} выходит на биржу</div><div class="sh-d">Продаёшь часть акций инвесторам, а поток остаётся твоим.</div>${rowsHTML([['Выплата', '+' + money(c.amt), 'g'], ['Наличные', money(me.cash)]])}`
+        : '<div class="sh-t">IPO не случилось</div><div class="sh-d">Нужна хотя бы одна инвестиция (🏭), чтобы вывести её на биржу.</div>'}
+      <div class="btns">${btn('Дальше', "UI.A('ok')")}</div>`;
+    case 'media':
+      return `<div class="kind" style="color:#a58cff">📺 Медиа</div><div class="sh-e">📺</div><div class="sh-t">Свой сюжет в прайм-тайм</div>
+      <div class="sh-d">Бесплатно и без риска ФАС: выбери компанию и сдвинь её цену на ${Math.round(D.RULES.pumpEffect * 100)}% за два броска.</div>
+      <div class="rows">${Object.keys(D.TICK).map(tk => `<div class="asset-sell"><span>${D.TICK[tk].e} ${tk} · ${fmtP(S.prices[tk].p)}</span><span style="display:flex;gap:6px"><button onclick="UI.A('media',{tk:'${tk}',up:true})">📣 Вверх</button><button style="background:#c0434a;color:#fff" onclick="UI.A('media',{tk:'${tk}',up:false})">📉 Вниз</button></span></div>`).join('')}</div>
+      <div class="btns">${btn('Не нужно', "UI.A('ok')", 'sec')}</div>`;
+    case 'raid':
+      return `<div class="kind" style="color:var(--red)">🥷 Рейдеры</div><div class="sh-e">🥷</div>
+      ${c.inv ? `<div class="sh-t">Рейдеры нацелились на ${c.inv.tk}</div><div class="sh-d">Заплати юристам за защиту, иначе потеряешь контроль над компанией и её поток.</div>
+        ${rowsHTML([['Защита', money(c.cost), 'y'], ['Под угрозой поток', money(c.inv.flow), 'r'], ['Наличные', money(me.cash)]])}
+        <div class="btns">${btn(`Защититься за ${money(c.cost)}`, "UI.A('buy')", 'gold', me.cash < c.cost)}${btn('Отдать компанию', "UI.A('pass')", 'sec')}</div>`
+        : `<div class="sh-t">Рейдерам нечего забирать</div><div class="sh-d">У тебя нет контрольных пакетов. Пока.</div><div class="btns">${btn('Дальше', "UI.A('ok')")}</div>`}`;
     case 'acq': {
       const t = D.TICK[c.tk], ok = me.cash >= c.cost;
       return `<div class="kind" style="color:#5fe0c4">🏢 Поглощение</div><div class="sh-e">${t.e}</div><div class="sh-t">Контрольный пакет ${c.tk}</div>

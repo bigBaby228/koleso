@@ -98,16 +98,16 @@ button{font:inherit;color:inherit;border:none;background:none;cursor:pointer}
 
 /* board */
 .board-wrap{padding:12px}
-.board{display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(7,1fr);gap:3px;aspect-ratio:1/1;width:100%}
-.cell{border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;font-size:19px;line-height:1;cursor:pointer}
-.cell span{font-size:8px;color:rgba(255,255,255,.75);margin-top:2px;letter-spacing:-.2px}
+.board{display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);gap:2px;aspect-ratio:1/1;width:100%}
+.cell{border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;font-size:16px;overflow:visible;line-height:1;cursor:pointer}
+.cell span{font-size:6.5px;color:rgba(255,255,255,.8);margin-top:2px;letter-spacing:-.3px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .cell.here{outline:2px solid #fff;outline-offset:-1px}
 .cell.mydream{box-shadow:inset 0 0 0 2px var(--gold),0 0 10px rgba(245,192,74,.6)}
-.tok{position:absolute;width:15px;height:15px;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
-.tok.me{width:20px;height:20px;font-size:12px;top:-4px;right:-4px;background:var(--btn);z-index:3;box-shadow:0 0 0 3px rgba(46,166,255,.35)}
+.tok{position:absolute;width:13px;height:13px;border-radius:50%;font-size:8px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
+.tok.me{width:18px;height:18px;font-size:11px;top:-4px;right:-4px;background:var(--btn);z-index:3;box-shadow:0 0 0 3px rgba(46,166,255,.35)}
 .tok.b0{bottom:-3px;left:-3px;z-index:2}
 .tok.b1{bottom:-3px;right:-3px;z-index:2}
-.center{grid-area:2/2/7/7;background:var(--bg2);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;text-align:center}
+.center{grid-area:2/2/9/9;background:var(--bg2);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;text-align:center}
 .fast .center{background:linear-gradient(160deg,#2a2148,#232e3c)}
 .ctitle{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--hint);text-transform:uppercase}
 .fast .ctitle{color:var(--gold)}
