@@ -339,3 +339,17 @@ details.qh div{line-height:1.45}
 .tlegend i svg{width:13px;height:13px}
 .tut-hl{outline:3px solid #e8c25a !important;outline-offset:2px;animation:tutp 1.2s infinite}
 @keyframes tutp{50%{outline-color:rgba(232,194,90,.35)}}
+
+/* --- онлайн --- */
+.lcode{font-size:34px;font-weight:800;letter-spacing:6px;text-align:center;margin:2px 0}
+.lseats{display:flex;flex-direction:column;gap:6px}
+.lseat{display:flex;align-items:center;gap:10px;background:var(--bg2);border-radius:12px;padding:10px 12px;min-height:44px}
+.lseat.empty{opacity:.6;border:1.5px dashed rgba(255,255,255,.18);background:none}
+.ldot{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.15);flex-shrink:0}
+.lname{flex:1;font-weight:700;font-size:14.5px}
+.ltag{font-size:11px;color:var(--hint)}
+.lbtn{background:rgba(255,255,255,.08);color:var(--link,#62bcf9);border:0;border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:600}
+.joinrow{display:flex;gap:8px;margin-top:6px}.joinrow input{flex:1;background:var(--bg2);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:#fff;padding:10px;font-size:16px;letter-spacing:3px;text-transform:uppercase}
+.joinrow .b{padding:10px 16px}
+.s-br{right:4px;bottom:6px}
+.four .d-br{display:none}

@@ -129,9 +129,10 @@ function tokens(list, here) {
 }
 
 /* Места игроков в углах стола */
-const SEAT_POS = ['bl', 'tl', 'tr'];
+const SEAT_POS = ['bl', 'tl', 'tr', 'br'];
 function seats(list) {
   if (!host) return;
+  host.classList.toggle('four', list.length > 3);
   host.querySelector('#seats').innerHTML = list.map((p, i) => {
     const stack = Math.max(1, Math.min(6, Math.round(Math.log10(Math.max(10, p.cash)) - 1)));
     const chips = Array.from({ length: stack }, (_, k) => `<i style="bottom:${k * 3}px"></i>`).join('');

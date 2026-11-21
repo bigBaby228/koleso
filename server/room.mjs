@@ -38,8 +38,9 @@ export async function checkTelegram(initData, botToken, maxAgeSec = 7 * 86400) {
 
 /* ---------- комната ---------- */
 export class RoomCore {
-  constructor(io, data) {
+  constructor(io, data, opts) {
     this.io = io;
+    this.afkMs = (opts && opts.afkMs) || AFK_MS;
     this.d = data || null; // { code, host, seats:[{uid,name,bot}], diff, state, afk:{uid:n}, deadline }
   }
   save() { this.io.save(this.d); }
@@ -160,8 +161,8 @@ export class RoomCore {
     if (!s || s.phase === 'over') { this.d.deadline = 0; return this.io.setAlarm(null); }
     const p = s.players[E.actorId(s)];
     if (p.bot) { this.d.deadline = 0; return this.io.setAlarm(BOT_MS); }
-    this.d.deadline = this.io.now() + AFK_MS;
-    this.io.setAlarm(AFK_MS);
+    this.d.deadline = this.io.now() + this.afkMs;
+    this.io.setAlarm(this.afkMs);
   }
   alarm() {
     const s = this.d && this.d.state;

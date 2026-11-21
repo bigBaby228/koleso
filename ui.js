@@ -6,7 +6,7 @@
 (function () {
 'use strict';
 const E = window.KolesoEngine, D = E.D, C = E.calc, { money, pct, fmtP } = E.fmt;
-const ME = 0, SAVE = 'koleso-save-v1', FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+let ME = 0; const SAVE = 'koleso-save-v1', FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 const $ = id => document.getElementById(id);
 const tgRaw = window.Telegram && window.Telegram.WebApp;
 const tg = tgRaw && tgRaw.initData ? tgRaw : null; // null, если открыто не в Telegram
@@ -15,7 +15,7 @@ let S = null, busy = false, view = 'board', diffSel = 'normal', profMode = 'rand
 let stageUI = null, seenLog = 0, seenNews = 0, tradeUI = null, qtyUI = null, anim = null, lastCash = null, builtKey = null, botTimer = null, overlayKey = null, restartArm = false;
 
 /* ---------- сохранение ---------- */
-function save() { if (tut) return; try { localStorage.setItem(SAVE, JSON.stringify({ S, seenLog, seenNews })); } catch (e) { /* хранилище недоступно */ } }
+function save() { if (tut || NET.on) return; try { localStorage.setItem(SAVE, JSON.stringify({ S, seenLog, seenNews })); } catch (e) { /* хранилище недоступно */ } }
 function load() { try { const x = JSON.parse(localStorage.getItem(SAVE)); return x && x.S && x.S.v === 4 ? x : null; } catch (e) { return null; } }
 function clearSave() { try { localStorage.removeItem(SAVE); } catch (e) { /* ignore */ } }
 
@@ -36,8 +36,12 @@ function haptic(kind) {
 }
 
 /* ---------- стартовый экран ---------- */
-function drawStart() {
-  const sv = load();
+function drawStart(msg) {
+  const sv = load(), room = lsGet(ROOMKEY);
+  $('onBox').innerHTML = (msg ? `<div class="note" style="color:#ff9b9b;margin-bottom:6px">${msg}</div>` : '')
+    + `<button class="b" style="width:100%;background:#7a4fd6" onclick="UI.online()">Играть с друзьями</button>`
+    + (room ? `<button class="b sec" style="width:100%;margin-top:8px" onclick="UI.rejoin()">Вернуться в комнату ${room}</button>` : '')
+    + `<details class="qh" style="margin-top:8px"><summary>Войти по коду комнаты</summary><div class="joinrow"><input id="joinInp" maxlength="8" placeholder="КОД"><button class="b" onclick="UI.joinCode()">Войти</button></div></details>`;
   $('contBox').innerHTML = sv && sv.S.phase !== 'over'
     ? `<button class="b contbtn" onclick="UI.resume()">▶ Продолжить партию (${sv.S.players[0].profName}, ход ${sv.S.players[0].turns})</button>` : '';
   $('diffSeg').innerHTML = Object.entries(D.DIFF).map(([k, v]) => `<button class="${k === diffSel ? 'on' : ''}" onclick="UI.setDiff('${k}')">${v.n}</button>`).join('');
@@ -54,14 +58,16 @@ function drawStart() {
     <div class="pd">Поток +${money(p.salary - ex)} · ${p.bonus}</div></div></button>`;
   }).join('');
 }
-function showStart() {
-  clearTimeout(botTimer); S = null; busy = false; tradeUI = null; overlayKey = null;
+function showStart(msg) {
+  clearTimeout(botTimer); S = null; busy = false; tradeUI = null; overlayKey = null; ME = 0;
+  if (NET.on) { NET.bye = true; NET.on = false; netClose(); }
+  $('scrLobby').classList.add('hidden');
   closeSheet(); $('win').classList.add('hidden'); $('app').classList.remove('fast');
   $('scrGame').classList.add('hidden'); $('scrStart').classList.remove('hidden');
-  drawStart();
+  drawStart(msg);
 }
 function showGame() {
-  $('scrStart').classList.add('hidden'); $('scrGame').classList.remove('hidden');
+  $('scrStart').classList.add('hidden'); $('scrLobby').classList.add('hidden'); $('scrGame').classList.remove('hidden');
   builtKey = null; lastCash = null; overlayKey = null; $('win').classList.add('hidden');
   switchView('board');
 }
@@ -114,7 +120,15 @@ const nameOf = pid => pid === ME ? 'Ты' : S.players[pid].name;
 function A(type, extra) { if (tut) return toast('Это обучение — кнопки только для примера'); dispatch(Object.assign({ type, pid: ME }, extra || {})); }
 function dispatch(a) {
   if (busy && !a._bot) { toast('Подожди, сейчас ход другого игрока'); return; }
-  const r = E.act(S, a);
+  if (NET.on) {
+    if (NET.pend) return;
+    if (!NET.ws || NET.ws.readyState !== 1) return toast('Нет связи с сервером, переподключаюсь…');
+    NET.pend = true; setTimeout(() => { NET.pend = false; }, 4000);
+    return NET.ws.send(JSON.stringify({ t: 'act', a }));
+  }
+  run(E.act(S, a), a);
+}
+function run(r, a) {
   if (!r.ok) { if (a.pid === ME) toast(r.events[0].text); busy = false; return; }
   const roll = r.events.find(e => e.t === 'roll' || e.t === 'skip');
   const myToasts = r.events.filter(e => e.t === 'toast' && e.pid === ME).map(e => e.text);
@@ -131,14 +145,14 @@ function dispatch(a) {
     save(); render(); achCheck();
     if (myToasts.length) toast(myToasts[myToasts.length - 1]);
     if (S.phase === 'over' && S.result.type === 'win' && S.result.pid === ME) haptic('ok');
-    kickBots();
+    kickBots(); netPump();
   };
   if (roll && roll.t === 'roll') { busy = true; render(); animateRoll(roll, finish); }
   else finish();
 }
 function kickBots() {
   clearTimeout(botTimer);
-  if (!S || S.phase === 'over' || stageUI || tut) return;
+  if (!S || S.phase === 'over' || stageUI || tut || NET.on) return;
   const a = E.botAction(S);
   if (!a) return;
   busy = true; render();
@@ -209,6 +223,7 @@ function render() {
   if (S.phase === 'over') { rb.disabled = true; rb.textContent = 'Партия окончена'; }
   else if (S.phase === 'exit') { rb.disabled = true; rb.textContent = S.exitPid === ME ? 'Выбери мечту' : `${nameOf(S.exitPid)} выбирает мечту…`; }
   else if (stageUI) { rb.disabled = true; rb.textContent = 'Средний круг'; }
+  else if (me.bankrupt) { rb.disabled = true; rb.textContent = `Ты выбыл(а) · ходит ${S.players[S.cur].name}`; }
   else if (S.cur !== ME) { rb.disabled = true; rb.textContent = `Ходит ${S.players[S.cur].name}…`; }
   else if (S.phase === 'card') { rb.disabled = true; rb.textContent = 'Реши по карточке'; }
   else { rb.disabled = busy; rb.textContent = me.skip > 0 ? `Пропустить ход (${me.skip})` : me.charity > 0 ? `Бросить 2 кубика (${me.charity})` : 'Бросить кубик'; }
@@ -220,6 +235,100 @@ function render() {
 const shortMoney = n => { const a = Math.abs(n), sg = n < 0 ? '−' : ''; return a >= 1e6 ? `${sg}$${(a / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',')}M` : a >= 1e4 ? `${sg}$${Math.round(a / 1000)}k` : a >= 1000 ? `${sg}$${(a / 1000).toFixed(1).replace('.', ',')}k` : `${sg}$${Math.round(a)}`; };
 const ringOf = me => me.mode === 'fast' ? [D.FCELLS, D.FT] : me.mode === 'mid' ? [D.MCELLS, D.MT] : [D.CELLS, D.CT];
 let lastHTML = '';
+
+/* ---------- онлайн ---------- */
+const CFG = window.KolesoConfig || {}, ROOMKEY = 'koleso-room', QS = new URLSearchParams(location.search);
+const SERVER = (QS.get('server') || CFG.server || '').replace(/\/$/, '');
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
+const NET = { on: false, ws: null, code: null, lobby: null, host: null, deadline: 0, q: [], pend: false, watch: false, bye: false, tries: 0 };
+function guestId() { let g = lsGet('koleso-guest'); if (!g) { g = Math.random().toString(36).slice(2, 12).padEnd(10, '0'); lsSet('koleso-guest', g); } return g; }
+function myUid() { const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user; return u && tg.initData ? 'tg' + u.id : 'g' + guestId(); }
+function netOpen(code) {
+  if (!SERVER) return toast('Онлайн ещё не настроен');
+  const create = !code;
+  if (create) { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; code = Array.from({ length: 5 }, () => A[Math.floor(Math.random() * A.length)]).join(''); }
+  netClose();
+  Object.assign(NET, { on: true, code, lobby: null, q: [], pend: false, watch: false, bye: false, create, tries: 0 });
+  lsSet(ROOMKEY, code);
+  showLobby('Подключаюсь…');
+  netConnect();
+}
+function netConnect() {
+  const ws = new WebSocket(SERVER.replace(/^http/, 'ws') + '/room/' + NET.code);
+  NET.ws = ws;
+  ws.onopen = () => { NET.tries = 0; ws.send(JSON.stringify({ t: 'hello', initData: (tg && tg.initData) || '', guest: guestId(), name: tg ? tgName() : 'Гость ' + guestId().slice(0, 3).toUpperCase(), create: NET.create, code: NET.code, diff: diffSel })); NET.create = false; };
+  ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } netMsg(m); };
+  ws.onclose = () => {
+    if (NET.ws !== ws || NET.bye || !NET.on) return;
+    NET.tries++;
+    if (NET.tries === 2) toast('Связь потеряна, переподключаюсь…');
+    setTimeout(() => { if (NET.on && NET.ws === ws) netConnect(); }, Math.min(8000, 800 * NET.tries));
+  };
+}
+function netClose() { if (NET.ws) { const w = NET.ws; NET.ws = null; try { w.close(); } catch (e) { /* ignore */ } } }
+function netSend(m) { if (NET.ws && NET.ws.readyState === 1) NET.ws.send(JSON.stringify(m)); else toast('Нет связи с сервером'); }
+function netLeave() {
+  if (NET.lobby && !S) netSend({ t: 'leave' });
+  NET.bye = true; NET.on = false; netClose(); lsSet(ROOMKEY, null);
+  S = null; ME = 0; showStart();
+}
+function netMsg(m) {
+  if (m.t === 'fatal') { toast(m.text); NET.bye = true; NET.on = false; netClose(); lsSet(ROOMKEY, null); S = null; ME = 0; return showStart(m.text); }
+  if (m.t === 'err') { NET.pend = false; return toast(m.text); }
+  if (m.t === 'lobby') {
+    NET.lobby = m; NET.host = m.host;
+    if (S) { S = null; ME = 0; clearTimeout(botTimer); busy = false; overlayKey = null; closeSheet(); $('win').classList.add('hidden'); }
+    return showLobby();
+  }
+  if (m.t === 'game') {
+    const fresh = !S;
+    NET.q = []; NET.pend = false; NET.host = m.host; NET.deadline = m.deadline; NET.lobby = null;
+    S = m.state; ME = Math.max(0, m.seat); busy = false; anim = null;
+    if (fresh) { seenLog = 0; seenNews = 0; showGame(); setLast(m.seat < 0 ? 'Ты смотришь партию' : 'Партия идёт'); }
+    return render();
+  }
+  if (m.t === 'step') { NET.q.push(m); netPump(); }
+}
+function netPump() {
+  if (!NET.on || busy || !NET.q.length || !S) return;
+  const m = NET.q.shift();
+  NET.deadline = m.deadline;
+  if (m.a.pid === ME) NET.pend = false;
+  if (m.a.type === 'trade' || m.a.type === 'buyStock') { if (m.a.pid !== ME) { /* чужая сделка не сбрасывает мой выбор */ } }
+  run({ ok: true, state: m.state, events: m.events }, m.a);
+}
+function invite() {
+  const link = CFG.app ? `${CFG.app}?startapp=${NET.code}` : '';
+  const text = `Садись за мой стол в «Колесе»${link ? '' : `: код комнаты ${NET.code}`}`;
+  const share = 'https://t.me/share/url?url=' + encodeURIComponent(link || text) + (link ? '&text=' + encodeURIComponent(text) : '');
+  try { if (tg && tg.openTelegramLink) return tg.openTelegramLink(share); } catch (e) { /* ignore */ }
+  try { navigator.clipboard.writeText(link || NET.code); toast('Ссылка скопирована'); } catch (e) { toast(link || NET.code); }
+}
+function showLobby(wait) {
+  clearTimeout(botTimer); closeSheet(); $('win').classList.add('hidden');
+  ['scrStart', 'scrGame'].forEach(x => $(x).classList.add('hidden')); $('scrLobby').classList.remove('hidden');
+  const L = NET.lobby, box = $('lobby');
+  if (!L) { box.innerHTML = `<h1 style="margin-top:30px">Комната ${NET.code}</h1><p class="sub">${wait || 'Подключаюсь…'}</p><button class="b sec" style="width:100%" onclick="UI.leaveRoom()">Отмена</button>`; return; }
+  const me = myUid(), host = L.host === me, humans = L.seats.filter(x => !x.bot).length;
+  const rows = [0, 1, 2, 3].map(i => {
+    const x = L.seats[i];
+    if (!x) return `<div class="lseat empty"><span class="ldot"></span><span class="lname">Свободно</span>${host ? `<button class="lbtn" onclick="UI.addBot()">+ бот</button>` : ''}</div>`;
+    const col = x.bot ? '#8a96a3' : D.HUMAN_COLORS[L.seats.slice(0, i).filter(y => !y.bot).length % 4];
+    const tag = x.uid === L.host ? 'хозяин' : x.bot ? 'бот' : x.online ? '' : 'не в сети';
+    return `<div class="lseat"><span class="ldot" style="background:${col}"></span><span class="lname">${x.bot ? 'Бот' : x.name}${x.uid === me ? ' (ты)' : ''}</span>${tag ? `<span class="ltag">${tag}</span>` : ''}
+      ${host && x.uid !== me ? `<button class="lbtn" onclick="UI.kick(${i})">убрать</button>` : ''}</div>`;
+  }).join('');
+  box.innerHTML = `<div class="lbl" style="margin-top:6px">Комната</div><div class="lcode">${L.code}</div>
+    <button class="b" style="width:100%;margin:8px 0 4px" onclick="UI.invite()">Пригласить друга</button>
+    <div class="lbl">За столом · ${L.seats.length} из 4</div><div class="lseats">${rows}</div>
+    <div class="lbl">Сложность</div>
+    ${host ? `<div class="seg">${Object.entries(D.DIFF).map(([k, v]) => `<button class="${k === L.diff ? 'on' : ''}" onclick="UI.lobbyDiff('${k}')">${v.n}</button>`).join('')}</div>` : `<div class="note">${D.DIFF[L.diff].n}</div>`}
+    <div class="note" style="margin-top:8px">Профессии раздаются случайно. Если игрок не ходит 60 секунд, за него сходит компьютер.</div>
+    ${host ? `<button class="b" style="width:100%;margin-top:14px;background:#2f7d55" onclick="UI.lobbyStart()">Начать игру · ${humans} ${humans === 1 ? 'человек' : humans < 5 ? 'человека' : 'человек'}${L.seats.length > humans ? ` и ${L.seats.length - humans} ${L.seats.length - humans === 1 ? 'бот' : 'бота'}` : ''}</button>`
+      : `<div class="note" style="text-align:center;margin-top:14px">Ждём, когда хозяин начнёт игру</div>`}
+    <button class="b sec" style="width:100%;margin-top:8px" onclick="UI.leaveRoom()">Выйти</button>`;
+}
 
 /* ---------- обучение ---------- */
 let tut = null;
@@ -316,14 +425,16 @@ function cellInfo(i) {
 function renderTokens() {
   const me = S.players[ME];
   const list = S.players.filter(q => !q.bankrupt && q.mode === me.mode)
-    .map(q => ({ pos: anim && anim.pid === q.id ? anim.pos : q.pos, color: q.id === ME ? '#2ea6ff' : q.color, me: q.id === ME }));
+    .map(q => ({ pos: anim && anim.pid === q.id ? anim.pos : q.pos, color: q.color, me: q.id === ME }));
   KolesoTable.tokens(list, anim && anim.pid === ME ? anim.pos : me.pos);
 }
 function renderRace() {
   const act = S.phase === 'exit' ? S.exitPid : S.cur;
-  KolesoTable.seats(S.players.map(q => ({
-    name: q.id === ME ? 'Ты' : q.name, emoji: q.emoji, color: q.id === ME ? '#2ea6ff' : q.color,
-    cashTxt: q.bankrupt ? 'банкрот' : shortMoney(q.cash), progress: q.bankrupt ? 0 : C.progress(S, q),
+  const n = S.players.length, order = S.players.map((_, i) => S.players[(ME + i) % n]); // я всегда в левом нижнем углу
+  const left = NET.on && NET.deadline ? Math.max(0, Math.ceil((NET.deadline - Date.now()) / 1000)) : null;
+  KolesoTable.seats(order.map(q => ({
+    name: q.id === ME ? 'Ты' : q.name + (q.auto ? ' · авто' : ''), emoji: q.emoji, color: q.color,
+    cashTxt: q.bankrupt ? 'банкрот' : act === q.id && left != null && !q.bot && S.phase !== 'over' ? `⏱ ${left} c` : shortMoney(q.cash), progress: q.bankrupt ? 0 : C.progress(S, q),
     active: act === q.id && S.phase !== 'over', out: q.bankrupt, badge: q.mode === 'fast' ? '★' : q.mode === 'mid' ? '◆' : '', cash: q.cash,
   })));
 }
@@ -799,10 +910,20 @@ function renderOverlay() {
   if (!busy && S.phase === 'exit' && S.exitPid === ME) key = 'exit';
   else if (!busy && stageUI && S.phase !== 'over') key = 'stage';
   else if (!busy && S.phase === 'over') key = 'over';
+  else if (!busy && me.bankrupt && !NET.watch) key = 'out';
   if (key === overlayKey) return;
   overlayKey = key;
   if (!key) { w.classList.add('hidden'); return; }
   closeSheet();
+  const againBtn = label => NET.on
+    ? (NET.host === myUid() ? `<button class="b" onclick="UI.rematch()">Сыграть ещё раз этим столом</button>` : `<div class="note" style="text-align:center">Новую партию запускает хозяин комнаты</div>`) + `<button class="b sec" onclick="UI.leaveRoom()">Выйти из комнаты</button>`
+    : `<button class="b${label === 'Новая партия' ? ' sec' : ''}" onclick="UI.newGame()">${label}</button>`;
+  if (key === 'out') {
+    w.className = 'win lose';
+    w.innerHTML = `<div class="big">💀</div><h2>Ты банкрот</h2><p>Партия продолжается без тебя. Можешь досмотреть, кто победит.</p>
+    <div class="btns"><button class="b" onclick="UI.watch()">Смотреть партию</button><button class="b sec" onclick="UI.leaveRoom()">Выйти из комнаты</button></div>`;
+    w.classList.remove('hidden'); return;
+  }
   if (key === 'stage') {
     w.className = 'win';
     w.innerHTML = `<div class="big">🎉</div><h2>Ты вышел из колеса!</h2>
@@ -829,11 +950,11 @@ function renderOverlay() {
       const dr = D.DREAMS[me.dream];
       w.className = 'win';
       w.innerHTML = `<div class="big">${dr.e}</div><h2>${r.how === 'dream' ? 'Мечта исполнена!' : 'Ты стал магнатом!'}</h2>
-      <p>${r.how === 'dream' ? `Ты купил: ${dr.n}.` : 'Твой поток вырос на 50%.'} Победа над Аней и Максом.</p>
+      <p>${r.how === 'dream' ? `Ты купил: ${dr.n}.` : 'Твой поток вырос на 50%.'} ${S.players.length > 1 ? `Победа над: ${S.players.filter(q => q.id !== ME).map(q => q.name).join(', ')}.` : ''}</p>
       <div class="storycard gold"><div class="k">Колесо · ${me.emoji} ${me.profName} · ${D.DIFF[S.diff].n}</div><div class="v">Победа за ${me.turns} ходов</div>
         <div class="grid"><div><div class="k">Поток БИ</div><div class="v">${money(me.fflow)}</div></div><div><div class="k">Наличные</div><div class="v">${money(me.cash)}</div></div>
         <div><div class="k">Инвестиций</div><div class="v">${me.finv.length}</div></div><div><div class="k">Мечта</div><div class="v">${dr.e}</div></div></div></div>
-      <div class="btns"><button class="b gold" onclick="UI.share()">📤 Поделиться в сторис</button><button class="b sec" onclick="UI.newGame()">Новая партия</button></div>`;
+      <div class="btns"><button class="b gold" onclick="UI.share()">📤 Поделиться в сторис</button>${againBtn('Новая партия')}</div>`;
       confetti();
     } else if (r.type === 'bankrupt') {
       w.className = 'win lose';
@@ -842,7 +963,7 @@ function renderOverlay() {
       <div class="storycard" style="background:linear-gradient(135deg,#5a1f26,#2a3240)"><div class="k">Итог · ${D.DIFF[S.diff].n}</div><div class="v">Продержался ${me.turns} ходов</div>
       <div class="grid"><div><div class="k">Долг банку</div><div class="v">${money(C.loanTotal(me))}</div></div><div><div class="k">Детей</div><div class="v">${me.children}</div></div></div></div>
       <p style="margin-bottom:14px">Совет: не бери кредиты под сделки, где платёж съедает поток, и держи подушку на соблазны.</p>
-      <div class="btns"><button class="b" onclick="UI.newGame()">Ещё раз</button></div>`;
+      <div class="btns">${againBtn('Ещё раз')}</div>`;
     } else {
       const b = S.players[r.pid] || { name: 'Никто', emoji: '🤷' };
       w.className = 'win lose';
@@ -850,7 +971,7 @@ function renderOverlay() {
       <p>Партия окончена. ${me.mode === 'rat' ? `Ты так и не выбрался из колеса: свобода ${C.freedom(S, me)}%.` : `Ты был в Большой игре: ${C.fProgress(S, me)}% до мечты.`}</p>
       <div class="storycard" style="background:linear-gradient(135deg,#444c58,#2a3240)"><div class="k">Твой результат · ${D.DIFF[S.diff].n}</div><div class="v">${me.turns} ходов</div>
       <div class="grid"><div><div class="k">Наличные</div><div class="v">${money(me.cash)}</div></div><div><div class="k">Долг</div><div class="v">${money(C.loanTotal(me))}</div></div></div></div>
-      <div class="btns"><button class="b" onclick="UI.newGame()">Реванш</button></div>`;
+      <div class="btns">${againBtn('Реванш')}</div>`;
     }
   }
   w.classList.remove('hidden');
@@ -877,6 +998,12 @@ window.UI = {
   showAch, showRules, closeAch: () => { $('win').classList.add('hidden'); overlayKey = null; if (S) render(); else drawStart(); },
   setMode: k => { profMode = k; drawStart(); },
   startRandom,
+  online: () => netOpen(null), joinCode: () => { const c = ($('joinInp').value || '').trim().toUpperCase(); if (c) netOpen(c); },
+  rejoin: () => { const c = lsGet(ROOMKEY); if (c) netOpen(c); },
+  addBot: () => netSend({ t: 'addBot' }), kick: i => netSend({ t: 'kick', i }), lobbyDiff: k => netSend({ t: 'diff', k }),
+  lobbyStart: () => netSend({ t: 'start' }), invite, leaveRoom: () => netLeave(), rematch: () => netSend({ t: 'rematch' }),
+  _dbg: () => ({ S, ME, busy, NET }),
+  watch: () => { NET.watch = true; overlayKey = null; render(); },
   setQty: n => { qtyUI = n; render(); },
   qty: () => qtyUI,
   confirmTrade: () => { if (tradeUI) A('trade', { tk: tradeUI.tk, side: tradeUI.side, qty: qtyUI }); },
@@ -887,10 +1014,13 @@ window.UI = {
   share: () => toast(tg ? 'Здесь откроется редактор сторис Telegram с этой карточкой' : 'В Telegram здесь откроется редактор сторис'),
   restart: el => {
     if (!restartArm) { restartArm = true; el.textContent = 'Точно? Нажми ещё раз'; setTimeout(() => { restartArm = false; }, 3000); return; }
-    restartArm = false; clearSave(); showStart();
+    restartArm = false; if (NET.on) return netLeave(); clearSave(); showStart();
   },
 };
 
 initTg();
 drawStart();
+{ const sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || new URLSearchParams(location.search).get('room');
+  if (sp && /^[A-Za-z0-9]{4,8}$/.test(sp)) netOpen(sp.toUpperCase()); }
+setInterval(() => { if (NET.on && S && NET.deadline && !busy && $('scrGame') && !$('scrGame').classList.contains('hidden')) renderRace(); }, 1000);
 })();

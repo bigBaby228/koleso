@@ -25,10 +25,10 @@ function room(code) {
     uidOf: c => c.uid || null,
     setUid: (c, u) => { c.uid = u; },
     save: d => { r.data = d; },
-    setAlarm: ms => { clearTimeout(r.timer); if (ms != null) r.timer = setTimeout(() => r.core.alarm(), AFK && ms > 5000 ? AFK : ms); },
+    setAlarm: ms => { clearTimeout(r.timer); if (ms != null) r.timer = setTimeout(() => r.core.alarm(), ms); },
     now: () => Date.now(),
   };
-  r.core = new RoomCore(io, null);
+  r.core = new RoomCore(io, null, { afkMs: AFK });
   rooms.set(code, r);
   return r;
 }
