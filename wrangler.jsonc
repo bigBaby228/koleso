@@ -1,0 +1,9 @@
+// Настройки сервера на Cloudflare. Сам сервер лежит в папке server/.
+{
+  "name": "koleso",
+  "main": "server/worker.mjs",
+  "compatibility_date": "2025-09-01",
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "vars": { "ALLOW_GUESTS": "0" }
+}

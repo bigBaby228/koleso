@@ -125,7 +125,9 @@ const PROFS = [
 const BOTS = [
   { name: 'Аня', color: '#e8a33d' },
   { name: 'Макс', color: '#b25ee0' },
+  { name: 'Лёша', color: '#d9534f' },
 ];
+const HUMAN_COLORS = ['#2ea6ff', '#3fbf7f', '#f0c040', '#ff7aa8'];
 
 /* ---------- Колесо ---------- */
 const CELLS = ['pay','sbiz','small','tempt','gamble','sbiz','market','big',
@@ -479,7 +481,7 @@ const ACH = [
   { id: 'bankrupt', e: '💀', n: 'Дно', d: 'Обанкротиться' },
 ];
 
-const KolesoData = { SECTORS, CYCLE, DILEMMAS, ACH, SKILLS, RULES, DIFF, PROFS, BOTS, CELLS, CT, SMALL, BIG, MARKET, TEMPT, SURPRISE, GAMBLES, SBIZ,
+const KolesoData = { HUMAN_COLORS, SECTORS, CYCLE, DILEMMAS, ACH, SKILLS, RULES, DIFF, PROFS, BOTS, CELLS, CT, SMALL, BIG, MARKET, TEMPT, SURPRISE, GAMBLES, SBIZ,
                      MCELLS, MT, MBIZ, MEVENTS, MGAMBLES, LUX, TICK, NEWS,
                      FCELLS, DREAM_CELLS, FT, DISASTER_TEXT, DREAMS, FAST, VENTURE };
 if (typeof module === 'object' && module.exports) module.exports = KolesoData;

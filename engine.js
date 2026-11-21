@@ -111,17 +111,25 @@ function newGame(opt) {
   const s = { v: 4, diff: opt.diff || 'normal', rng: seed, tick: 0, cur: 0, phase: 'roll', card: null, exitPid: null, result: null,
     rate: R.startRate, pend: [], news: [], offers: [], log: [], uid: 0, players: [],
     prices: Object.fromEntries(Object.entries(D.TICK).map(([k, v]) => [k, { p: v.p, fv: v.p, div: v.div, prev: v.p, hist: [v.p] }])) };
-  s.players.push(makePlayer(0, opt.prof, { name: opt.name || 'Ты', color: '#2ea6ff', bot: !!opt.allBots }));
-  // ботам каждую партию достаётся случайная профессия (если в BOTS не задана фиксированная через fixedProf)
-  D.BOTS.forEach((b, i) => {
-    const prof = b.fixedProf || D.PROFS[Math.floor(rnd(s) * D.PROFS.length)].id;
-    s.players.push(makePlayer(i + 1, prof, Object.assign({}, b, { bot: true, emoji: null })));
-  });
+  const rprof = () => D.PROFS[Math.floor(rnd(s) * D.PROFS.length)].id;
+  if (opt.seats) {
+    // онлайн: места по порядку, люди и боты вперемешку (1–4 места)
+    let hi = 0, bi = 0;
+    opt.seats.slice(0, 4).forEach((x, i) => {
+      if (x.bot) { const b = D.BOTS[bi++ % D.BOTS.length]; s.players.push(makePlayer(i, b.fixedProf || rprof(), Object.assign({}, b, { bot: true, emoji: null }))); }
+      else s.players.push(Object.assign(makePlayer(i, x.prof || rprof(), { name: x.name || 'Игрок', color: D.HUMAN_COLORS[hi++ % D.HUMAN_COLORS.length] }), { uid: x.uid }));
+    });
+  } else {
+    s.players.push(makePlayer(0, opt.prof, { name: opt.name || 'Ты', color: '#2ea6ff', bot: !!opt.allBots }));
+    // ботам каждую партию достаётся случайная профессия (если в BOTS не задана фиксированная через fixedProf)
+    D.BOTS.slice(0, opt.bots == null ? 2 : opt.bots).forEach((b, i) => s.players.push(makePlayer(i + 1, b.fixedProf || rprof(), Object.assign({}, b, { bot: true, emoji: null }))));
+  }
   const c0 = D.CYCLE[0]; s.cycle = { i: 0, left: ri(s, c0.len[0], c0.len[1]) * s.players.length };
   s.cycle.est = Math.round(s.cycle.left / s.players.length) + ri(s, -2, 2); s.cycle.start = 0;
-  sys(s, `🎡 Партия началась · сложность «${diff(s).n}» · ${s.players.length} игрока`);
-  if (s.players[1]) say(s, 1, `Привет! Я ${s.players[1].profName.toLowerCase()}, погнали`);
-  if (s.players[2]) say(s, 2, `Я ${s.players[2].profName.toLowerCase()}. В этот раз без айфонов`);
+  const n = s.players.length;
+  sys(s, `🎡 Партия началась · сложность «${diff(s).n}» · ${n} ${n === 1 ? 'игрок' : n < 5 ? 'игрока' : 'игроков'}`);
+  const hello = [p => `Привет! Я ${p}, погнали`, p => `Я ${p}. В этот раз без айфонов`, p => `${p[0].toUpperCase() + p.slice(1)} на месте. Кто первый в колесо?`];
+  s.players.filter(q => q.bot).forEach((q, i) => say(s, q.id, hello[i % 3](q.profName.toLowerCase())));
   genNews(s);
   return s;
 }
@@ -755,14 +763,14 @@ function setupAuction(s, p, card) {
   if (p.bot) return;
   const d = card.deal, bids = [];
   for (const q of s.players) {
-    if (q.id === p.id || q.bankrupt || q.mode !== p.mode) continue;
+    if (q.id === p.id || q.bankrupt || !q.bot || q.mode !== p.mode) continue; // торгуются только боты
     const max = botValue(s, q, d), cap = Math.min(maxLoan(s, q), q.cash * 4 + 1);
     if (max >= d.down && q.cash + cap >= max) bids.push({ pid: q.id, max });
   }
   if (bids.length) card.auction = { price: d.down, leader: null, bids, log: [], done: false };
 }
 function auctionToBot(s, c) {
-  const au = c.auction, win = au.leader != null && au.leader !== 0 && s.players[au.leader].bot ? au.bids.find(b => b.pid === au.leader) : au.bids.slice().sort((x, y) => y.max - x.max)[0];
+  const au = c.auction, win = au.leader != null && s.players[au.leader].bot ? au.bids.find(b => b.pid === au.leader) : au.bids.slice().sort((x, y) => y.max - x.max)[0];
   if (!win) return;
   const q = s.players[win.pid], price = au.leader === win.pid ? au.price : c.deal.down;
   if (q.cash < price) { const L = Math.ceil((price - q.cash) / 1000) * 1000; if (!canBorrow(s, q, L)) return; borrow(s, q, L, 'deal'); }
@@ -883,7 +891,8 @@ function pay(s, p, n, ev) {
 function bankrupt(s, p) {
   p.bankrupt = true; p.assets = [];
   sys(s, `💀 ${p.name} обанкротился(ась)`);
-  if (!p.bot) { s.phase = 'over'; s.card = null; s.result = { type: 'bankrupt', pid: p.id }; }
+  // партия заканчивается, когда не осталось живых людей; в онлайне выбывший смотрит дальше
+  if (!p.bot && !s.players.some(q => !q.bot && !q.bankrupt)) { s.phase = 'over'; s.card = null; s.result = { type: 'bankrupt', pid: p.id }; }
 }
 function afterBankrupt(s, p) {
   if (s.phase === 'over') return;
@@ -972,6 +981,19 @@ function botAction(s) {
   if (s.phase === 'over') return null;
   const pid = actorId(s), p = s.players[pid];
   if (!p || !p.bot) return null;
+  return botMove(s, pid, p);
+}
+// ход за человека, который не отвечает: без покупок и рисков
+function afkAction(s) {
+  if (s.phase === 'over') return null;
+  const pid = actorId(s);
+  if (s.phase === 'exit') return { type: 'dream', pid, i: 0 };
+  if (s.phase === 'roll') return { type: 'roll', pid };
+  if (s.card && s.card.kind === 'dilemma') return { type: 'choose', pid, opt: 'a' };
+  if (s.card && s.card.result) return { type: 'ok', pid };
+  return { type: 'pass', pid };
+}
+function botMove(s, pid, p) {
   if (s.phase === 'exit') return { type: 'dream', pid, i: [1, 0, 2][pid % 3] };
   if (s.phase === 'roll') {
     if (p.mode !== 'fast' && p.loans.length) {
@@ -1024,7 +1046,7 @@ function botAction(s) {
 }
 
 const KolesoEngine = {
-  newGame, act, botAction, actorId, D,
+  newGame, act, botAction, afkAction, actorId, D,
   calc: { passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
           midF, midProgress, cap, has, rateFor, skillCost, debtFree, loadPremium,
           phase, secOf, cycK, assetIncome, managedIds, slots, sectorsCount, salePrice, isBiz, takeoverCost, takeoverFlow, influenceCost },
