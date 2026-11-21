@@ -353,3 +353,70 @@ details.qh div{line-height:1.45}
 .joinrow .b{padding:10px 16px}
 .s-br{right:4px;bottom:6px}
 .four .d-br{display:none}
+
+/* ===== магазин и КолесоКоины ===== */
+.coin{display:inline-flex;align-items:center;justify-content:center;width:1.25em;height:1.25em;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe9a8,#e0a830 60%,#a8741a);color:#5a3a00;font-weight:900;font-size:.72em;vertical-align:-.15em;box-shadow:inset 0 0 0 1.5px rgba(120,80,0,.5)}
+.wallet{font-size:20px;font-weight:800;margin:4px 0 6px;color:var(--gold)}
+.coinwin{font-size:17px;font-weight:800;color:var(--gold);margin:2px 0 12px}
+.shop{display:flex;flex-direction:column;gap:8px;width:100%}
+.theme{display:flex;align-items:center;gap:12px;background:var(--bg2);border-radius:14px;padding:10px;border:2px solid transparent}
+.theme.on{border-color:var(--gold)}
+.tsw{width:52px;height:52px;border-radius:12px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+.ti{flex:1;min-width:0}.tn{font-weight:800;font-size:15px}.td{font-size:12px;color:var(--hint);line-height:1.35;margin-top:2px}
+.theme .b{padding:9px 12px;font-size:13.5px;white-space:nowrap;min-width:84px}
+
+/* ===== темы: общие правила ===== */
+body[class*="th-"]{background:var(--bg)}
+body[class*="th-"] .tabs{border-top-color:transparent}
+body[class*="th-"] .chat{background:var(--bg)}
+body[class*="th-"] .npost,body[class*="th-"] .coach{background:var(--bg2)}
+body[class*="th-"] .win{background:radial-gradient(circle at 50% 25%,var(--bg3),var(--bg) 70%)}
+body[class*="th-"] .win.lose{background:radial-gradient(circle at 50% 25%,#4a1820,var(--bg) 70%)}
+body[class*="th-"] .mid .hud,body[class*="th-"] .fast .hud{background:var(--bg2)}
+body[class*="th-"] .mid .mainbtn,body[class*="th-"] .fast .mainbtn{background:var(--btn);color:var(--btntext,#fff)}
+body[class*="th-"] .mainbtn,body[class*="th-"] .b:not(.sec):not(.warn){color:var(--btntext,#fff)}
+
+/* --- Бумага (светлая) --- */
+.th-paper{--bg:#f3ede2;--bg2:#fffaf0;--bg3:#e7dcc8;--text:#2b2520;--hint:#8a7f70;--link:#b5532a;--btn:#c2562e;--green:#2f8a4c;--red:#c43a3a;--gold:#a8741a}
+.th-paper .room{background:linear-gradient(#e9dfcc,#d9ccb3) !important}
+.th-paper .ttable{background:linear-gradient(135deg,#d9b98c,#b08657) !important;box-shadow:0 10px 24px rgba(90,60,20,.3) !important}
+.th-paper .felt{background:repeating-linear-gradient(45deg,rgba(150,120,80,.07) 0 3px,transparent 3px 6px),#f4ecdc !important;box-shadow:inset 0 0 30px rgba(120,90,40,.25) !important;outline:none !important}
+.th-paper .tcenter{color:#6b4e2a !important}
+.th-paper .sname{color:#2b2520;text-shadow:none}.th-paper .scash{color:#5a4f42;text-shadow:none}
+.th-paper .sheet,.th-paper .win{color:var(--text)}
+.th-paper .b.sec{color:#2b2520}
+.th-paper .shade{background:rgba(60,40,10,.35)}
+.th-paper .joinrow input{color:#2b2520;border-color:#cbbd9f}
+
+/* --- Неон --- */
+.th-neon{--bg:#0d0221;--bg2:#1a0b3a;--bg3:#2b1460;--text:#f0e6ff;--hint:#9d8cc9;--link:#2de2ff;--btn:#ff2bd6;--green:#39ff88;--red:#ff4d6d;--gold:#ffe14d}
+.th-neon .room{background:radial-gradient(ellipse at 50% 120%,rgba(255,43,214,.35),transparent 60%),radial-gradient(ellipse at 50% -20%,rgba(45,226,255,.3),transparent 55%),#0d0221 !important}
+.th-neon .ttable{background:#12052e !important;box-shadow:0 0 0 2px #2de2ff,0 0 24px rgba(45,226,255,.7),0 0 60px rgba(255,43,214,.35) !important}
+.th-neon .felt{background:linear-gradient(rgba(45,226,255,.09) 1px,transparent 1px) 0 0/18px 18px,linear-gradient(90deg,rgba(45,226,255,.09) 1px,transparent 1px) 0 0/18px 18px,radial-gradient(ellipse at 50% 45%,#2a0b5a,#0d0221 75%) !important;box-shadow:inset 0 0 30px rgba(255,43,214,.35) !important;outline:none !important}
+.th-neon .tcenter{color:#2de2ff !important;text-shadow:0 0 8px rgba(45,226,255,.8)}
+.th-neon .b:not(.sec):not(.warn),.th-neon .mainbtn{box-shadow:0 0 14px rgba(255,43,214,.55)}
+
+/* --- Сакура --- */
+.th-sakura{--bg:#2a1a22;--bg2:#3a2430;--bg3:#4d2f3e;--text:#ffeef4;--hint:#c79aae;--link:#ffb3cf;--btn:#e85d8f;--green:#8fe3a6;--red:#ff6b81;--gold:#ffd27a}
+.th-sakura .room{background:radial-gradient(circle,rgba(255,190,215,.5) 0 2px,transparent 3px) 0 0/37px 41px,radial-gradient(circle,rgba(255,220,235,.35) 0 1.5px,transparent 2.5px) 15px 20px/29px 33px,linear-gradient(#3d2230,#24141c) !important}
+.th-sakura .ttable{background:linear-gradient(135deg,#fbeef2,#d9b8c4) !important;box-shadow:0 12px 28px rgba(0,0,0,.5) !important}
+.th-sakura .felt{background:radial-gradient(circle,rgba(232,93,143,.22) 0 3px,transparent 4px) 0 0/26px 26px,radial-gradient(ellipse at 50% 40%,#ffe3ec,#f3bccd 80%) !important;box-shadow:inset 0 0 36px rgba(160,60,100,.3) !important;outline:none !important}
+.th-sakura .tcenter{color:#8a2f55 !important}
+
+/* --- Терминал --- */
+.th-terminal{--bg:#000;--bg2:#031a08;--bg3:#073014;--text:#39ff6a;--hint:#1f9e45;--link:#7dffa0;--btn:#0f7a32;--green:#39ff6a;--red:#ff5050;--gold:#c8ff3a}
+.th-terminal,.th-terminal button,.th-terminal input{font-family:"SF Mono",Menlo,Consolas,"Courier New",monospace !important}
+.th-terminal .room{background:repeating-linear-gradient(0deg,rgba(57,255,106,.05) 0 1px,transparent 1px 3px),#000 !important}
+.th-terminal .ttable{background:#021006 !important;box-shadow:0 0 0 1.5px #39ff6a,0 0 18px rgba(57,255,106,.4) !important}
+.th-terminal .felt{background:repeating-radial-gradient(circle at 50% 50%,transparent 0 22px,rgba(57,255,106,.14) 22px 23px),linear-gradient(rgba(57,255,106,.08) 1px,transparent 1px) 0 0/100% 50%,linear-gradient(90deg,rgba(57,255,106,.08) 1px,transparent 1px) 0 0/50% 100%,#000 !important;box-shadow:inset 0 0 30px rgba(57,255,106,.2) !important;outline:none !important}
+.th-terminal .tcenter{color:#39ff6a !important}
+.th-terminal .b.sec{border:1px solid #1f9e45}
+.th-terminal .sname,.th-terminal .scash{color:#39ff6a}
+
+/* --- Золото --- */
+.th-gold{--bg:#0b0b0b;--bg2:#17140e;--bg3:#2a2214;--text:#f6ecd2;--hint:#a08f6a;--link:#e8c25a;--btn:#c9a24a;--btntext:#1a1200;--green:#7fd18f;--red:#ff6b6b;--gold:#e8c25a}
+.th-gold .room{background:radial-gradient(ellipse at 50% 0%,rgba(232,194,90,.18),transparent 60%),#070707 !important}
+.th-gold .ttable{background:linear-gradient(135deg,#f5dc84,#9a7420 45%,#e8c25a 70%,#715210) !important;box-shadow:0 0 28px rgba(232,194,90,.3),0 12px 30px rgba(0,0,0,.8) !important}
+.th-gold .felt{background:radial-gradient(ellipse at 50% 40%,#2a2620,#0c0b09 78%) !important;box-shadow:inset 0 0 50px rgba(0,0,0,.8) !important;outline:1px solid rgba(232,194,90,.35) !important;outline-offset:-8px}
+.th-gold .tcenter{color:#e8c25a !important}
+.theme .ti{text-align:left}

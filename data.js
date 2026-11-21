@@ -135,6 +135,17 @@ const BOTS = [
   { name: 'Макс', color: '#b25ee0' },
   { name: 'Лёша', color: '#d9534f' },
 ];
+// Темы оформления: покупаются за КолесоКоины в магазине. bg/hdr — цвета шапки Telegram, sw — образец для витрины
+const THEMES = [
+  { id: 'classic', n: 'Классика', d: 'Тёмная тема Telegram, у каждого круга свой стол.', price: 0, bg: '#17212b', hdr: '#232e3c', sw: ['#17212b', '#2ea6ff', '#2b8b5b'] },
+  { id: 'paper', n: 'Бумага', d: 'Светлая тема, стол из светлого дерева и льняное сукно.', price: 200, bg: '#f3ede2', hdr: '#e9e0d0', sw: ['#f3ede2', '#c2562e', '#d8c7a5'] },
+  { id: 'neon', n: 'Неон', d: 'Ночной город: фиолетовый, розовый и голубая подсветка стола.', price: 300, bg: '#0d0221', hdr: '#1a0b3a', sw: ['#0d0221', '#ff2bd6', '#2de2ff'] },
+  { id: 'sakura', n: 'Сакура', d: 'Пудрово-розовая тема, стол из белого дерева с лепестками.', price: 300, bg: '#2a1a22', hdr: '#3a2430', sw: ['#2a1a22', '#ff7aa8', '#ffd6e4'] },
+  { id: 'terminal', n: 'Терминал', d: 'Зелёный моноширинный шрифт на чёрном, стол как схема на радаре.', price: 400, bg: '#000000', hdr: '#031a08', sw: ['#000000', '#39ff6a', '#0f7a32'] },
+  { id: 'gold', n: 'Золото', d: 'Чёрная кожа и золото на всех столах, для тех, кто уже вышел из колеса.', price: 500, bg: '#0b0b0b', hdr: '#17140e', sw: ['#0b0b0b', '#e8c25a', '#3a2c12'] },
+];
+// КолесоКоины за партию (до множителя сложности)
+const COINS = { win: 100, play: 25, bankrupt: 10, mid: 15, fast: 30, ach: 20, friends: 1.2, diff: { easy: 0.6, normal: 1, hard: 1.6 } };
 const HUMAN_COLORS = ['#2ea6ff', '#3fbf7f', '#f0c040', '#ff7aa8'];
 
 /* ---------- Колесо ---------- */
@@ -489,7 +500,7 @@ const ACH = [
   { id: 'bankrupt', e: '💀', n: 'Дно', d: 'Обанкротиться' },
 ];
 
-const KolesoData = { HUMAN_COLORS, SECTORS, CYCLE, DILEMMAS, ACH, SKILLS, RULES, DIFF, PROFS, BOTS, CELLS, CT, SMALL, BIG, MARKET, TEMPT, SURPRISE, GAMBLES, SBIZ,
+const KolesoData = { THEMES, COINS, HUMAN_COLORS, SECTORS, CYCLE, DILEMMAS, ACH, SKILLS, RULES, DIFF, PROFS, BOTS, CELLS, CT, SMALL, BIG, MARKET, TEMPT, SURPRISE, GAMBLES, SBIZ,
                      MCELLS, MT, MBIZ, MEVENTS, MGAMBLES, LUX, TICK, NEWS,
                      FCELLS, DREAM_CELLS, FT, DISASTER_TEXT, DREAMS, FAST, VENTURE };
 if (typeof module === 'object' && module.exports) module.exports = KolesoData;

@@ -116,7 +116,7 @@ function makePlayer(id, profId, o) {
 }
 function newGame(opt) {
   const seed = (opt.seed == null ? Date.now() : opt.seed) | 0;
-  const s = { v: 4, diff: opt.diff || 'normal', rng: seed, tick: 0, cur: 0, phase: 'roll', card: null, exitPid: null, result: null,
+  const s = { v: 4, seed, diff: opt.diff || 'normal', rng: seed, tick: 0, cur: 0, phase: 'roll', card: null, exitPid: null, result: null,
     rate: R.startRate, pend: [], news: [], offers: [], log: [], uid: 0, players: [],
     prices: Object.fromEntries(Object.entries(D.TICK).map(([k, v]) => [k, { p: v.p, fv: v.p, div: v.div, prev: v.p, hist: [v.p] }])) };
   const rprof = () => D.PROFS[Math.floor(rnd(s) * D.PROFS.length)].id;

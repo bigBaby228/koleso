@@ -20,13 +20,67 @@ function load() { try { const x = JSON.parse(localStorage.getItem(SAVE)); return
 function clearSave() { try { localStorage.removeItem(SAVE); } catch (e) { /* ignore */ } }
 
 /* ---------- Telegram ---------- */
+/* ---------- кошелёк и темы ---------- */
+const WALLET = 'koleso-wallet-v1';
+function wallet() {
+  try { const w = JSON.parse(localStorage.getItem(WALLET)); if (w && typeof w.coins === 'number') return Object.assign({ owned: ['classic'], theme: 'classic', paid: [] }, w); } catch (e) { /* ignore */ }
+  return { coins: 0, owned: ['classic'], theme: 'classic', paid: [] };
+}
+function walletSave(w) { try { localStorage.setItem(WALLET, JSON.stringify(w)); } catch (e) { /* ignore */ } }
+function addCoins(n) { const w = wallet(); w.coins += n; walletSave(w); }
+function applyTheme(id) {
+  const th = D.THEMES.find(t => t.id === id) || D.THEMES[0];
+  D.THEMES.forEach(t => document.body.classList.remove('th-' + t.id));
+  if (th.id !== 'classic') document.body.classList.add('th-' + th.id);
+  try { if (tg && tg.setHeaderColor) tg.setHeaderColor(th.hdr); if (tg && tg.setBackgroundColor) tg.setBackgroundColor(th.bg); } catch (e) { /* ignore */ }
+}
+function gameReward() {
+  const me = S.players[ME], r = S.result, won = r && r.type === 'win' && r.pid === ME, K = D.COINS;
+  let n = won ? K.win : me.bankrupt ? K.bankrupt : K.play;
+  if (!won) n += me.mode === 'fast' ? K.fast : me.mode === 'mid' ? K.mid : 0;
+  const friends = S.players.some(q => !q.bot && !q.auto && q.id !== ME);
+  return Math.max(5, Math.round(n * (K.diff[S.diff] || 1) * (friends ? K.friends : 1) / 5) * 5);
+}
+// начисляется один раз за партию; возвращает сумму, чтобы показать на финальном экране
+function awardGame() {
+  if (tut || !S || S.seed == null) return 0;
+  const me = S.players[ME];
+  if (me.bot && !me.auto) return 0;
+  const id = (NET.on ? NET.code : 'solo') + ':' + S.seed + ':' + ME, w = wallet(), n = gameReward();
+  if (!w.paid.includes(id)) { w.paid.push(id); w.paid = w.paid.slice(-40); w.coins += n; walletSave(w); }
+  return n;
+}
+const coinLine = n => n ? `<div class="coinwin">+${n} <span class="coin">К</span> КолесоКоинов</div>` : '';
+function showShop() {
+  const w = $('win'), wl = wallet();
+  w.className = 'win';
+  w.innerHTML = `<h2 style="margin-top:4px">Магазин</h2><div class="wallet"><span class="coin">К</span> ${wl.coins.toLocaleString('ru-RU')} КолесоКоинов</div>
+    <div class="note" style="margin:0 0 10px;text-align:center">Коины дают за каждую партию: победа ${D.COINS.win}, участие ${D.COINS.play}, достижение ${D.COINS.ach}. Хардкор ×${D.COINS.diff.hard}, игра с друзьями ×${D.COINS.friends}.</div>
+    <div class="shop">${D.THEMES.map(t => {
+      const own = wl.owned.includes(t.id), on = wl.theme === t.id;
+      const b = on ? '<button class="b sec" disabled>Надета</button>'
+        : own ? `<button class="b" onclick="UI.wearTheme('${t.id}')">Надеть</button>`
+        : `<button class="b ${wl.coins >= t.price ? 'warn' : ''}" ${wl.coins >= t.price ? '' : 'disabled'} onclick="UI.buyTheme('${t.id}')"><span class="coin">К</span> ${t.price}</button>`;
+      return `<div class="theme ${on ? 'on' : ''}"><div class="tsw" style="background:linear-gradient(135deg,${t.sw[0]} 0 45%,${t.sw[1]} 45% 70%,${t.sw[2]} 70%)"></div>
+        <div class="ti"><div class="tn">${t.n}</div><div class="td">${t.d}</div></div>${b}</div>`;
+    }).join('')}</div>
+    <button class="b sec" style="width:100%;margin-top:10px" onclick="UI.closeAch()">Закрыть</button>`;
+  w.classList.remove('hidden');
+}
+function buyTheme(id) {
+  const t = D.THEMES.find(x => x.id === id), w = wallet();
+  if (!t || w.owned.includes(id)) return;
+  if (w.coins < t.price) return toast('Не хватает КолесоКоинов');
+  w.coins -= t.price; w.owned.push(id); w.theme = id; walletSave(w);
+  applyTheme(id); haptic('ok'); toast(`Тема «${t.n}» куплена и надета`); showShop(); drawStart();
+}
+function wearTheme(id) { const w = wallet(); if (!w.owned.includes(id)) return; w.theme = id; walletSave(w); applyTheme(id); showShop(); }
+
 function initTg() {
   if (!tg) return;
   document.body.classList.add('in-tg');
   try {
     tg.ready(); tg.expand();
-    if (tg.setHeaderColor) tg.setHeaderColor('#232e3c');
-    if (tg.setBackgroundColor) tg.setBackgroundColor('#17212b');
     if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
   } catch (e) { /* старый клиент Telegram */ }
 }
@@ -38,6 +92,7 @@ function haptic(kind) {
 /* ---------- стартовый экран ---------- */
 function drawStart(msg) {
   const sv = load(), room = lsGet(ROOMKEY);
+  $('shopBtn').innerHTML = `Магазин · <span class="coin">К</span> ${wallet().coins.toLocaleString('ru-RU')}`;
   $('onBox').innerHTML = (msg ? `<div class="note" style="color:#ff9b9b;margin-bottom:6px">${msg}</div>` : '')
     + `<button class="b" style="width:100%;background:#7a4fd6" onclick="UI.online()">Играть с друзьями</button>`
     + (room ? `<button class="b sec" style="width:100%;margin-top:8px" onclick="UI.rejoin()">Вернуться в комнату ${room}</button>` : '')
@@ -401,8 +456,10 @@ function achCheck() {
   };
   D.DREAMS.forEach((d, i) => { ok['dream' + i] = won && r.how === 'dream' && me.dream === i; });
   const got = achGot(); let fresh = null;
-  D.ACH.forEach(a => { if (ok[a.id] && !got[a.id]) { got[a.id] = Date.now(); fresh = a; } });
-  if (fresh) { try { localStorage.setItem(ACH_KEY, JSON.stringify(got)); } catch (e) { /* ignore */ } setTimeout(() => toast(`${fresh.e} Достижение: ${fresh.n}`), 900); haptic('ok'); }
+  let nNew = 0;
+  D.ACH.forEach(a => { if (ok[a.id] && !got[a.id]) { got[a.id] = Date.now(); fresh = a; nNew++; } });
+  if (nNew) addCoins(nNew * D.COINS.ach);
+  if (fresh) { try { localStorage.setItem(ACH_KEY, JSON.stringify(got)); } catch (e) { /* ignore */ } setTimeout(() => toast(`${fresh.e} Достижение: ${fresh.n} · +${nNew * D.COINS.ach} коинов`), 900); haptic('ok'); }
 }
 function showAch() {
   const got = achGot(), n = D.ACH.filter(a => got[a.id]).length, w = $('win');
@@ -929,7 +986,7 @@ function renderOverlay() {
   if (key === 'out') {
     w.className = 'win lose';
     w.innerHTML = `<div class="big">💀</div><h2>Ты банкрот</h2><p>Партия продолжается без тебя. Можешь досмотреть, кто победит.</p>
-    <div class="btns"><button class="b" onclick="UI.watch()">Смотреть партию</button><button class="b sec" onclick="UI.leaveRoom()">Выйти из комнаты</button></div>`;
+    ${coinLine(awardGame())}<div class="btns"><button class="b" onclick="UI.watch()">Смотреть партию</button><button class="b sec" onclick="UI.leaveRoom()">Выйти из комнаты</button></div>`;
     w.classList.remove('hidden'); return;
   }
   if (key === 'stage') {
@@ -957,7 +1014,7 @@ function renderOverlay() {
       const dr = D.DREAMS[me.dream];
       w.className = 'win';
       w.innerHTML = `<div class="big">${dr.e}</div><h2>${r.how === 'dream' ? 'Мечта исполнена!' : 'Ты стал магнатом!'}</h2>
-      <p>${r.how === 'dream' ? `Ты купил: ${dr.n}.` : 'Твой поток вырос на 50%.'} ${S.players.length > 1 ? `Победа над: ${S.players.filter(q => q.id !== ME).map(q => q.name).join(', ')}.` : ''}</p>
+      <p>${r.how === 'dream' ? `Ты купил: ${dr.n}.` : `Твой поток вырос до ${money(C.fTarget(me))}.`} ${S.players.length > 1 ? `Победа над: ${S.players.filter(q => q.id !== ME).map(q => q.name).join(', ')}.` : ''}</p>
       <div class="storycard gold"><div class="k">Колесо · ${me.emoji} ${me.profName} · ${D.DIFF[S.diff].n}</div><div class="v">Победа за ${me.turns} ходов</div>
         <div class="grid"><div><div class="k">Поток БИ</div><div class="v">${money(me.fflow)}</div></div><div><div class="k">Наличные</div><div class="v">${money(me.cash)}</div></div>
         <div><div class="k">Инвестиций</div><div class="v">${me.finv.length}</div></div><div><div class="k">Мечта</div><div class="v">${dr.e}</div></div></div></div>
@@ -980,6 +1037,8 @@ function renderOverlay() {
       <div class="grid"><div><div class="k">Наличные</div><div class="v">${money(me.cash)}</div></div><div><div class="k">Долг</div><div class="v">${money(C.loanTotal(me))}</div></div></div></div>
       <div class="btns">${againBtn('Реванш')}</div>`;
     }
+    const n = awardGame(), bt = w.querySelector('.btns');
+    if (n && bt) bt.insertAdjacentHTML('beforebegin', coinLine(n));
   }
   w.classList.remove('hidden');
 }
@@ -1004,7 +1063,7 @@ window.UI = {
   setRepay: n => { repayAmt = n; render(); },
   showAch, showRules, closeAch: () => { $('win').classList.add('hidden'); overlayKey = null; if (S) render(); else drawStart(); },
   setMode: k => { profMode = k; drawStart(); },
-  startRandom,
+  startRandom, showShop, buyTheme, wearTheme,
   online: () => netOpen(null), joinCode: () => { const c = ($('joinInp').value || '').trim().toUpperCase(); if (c) netOpen(c); },
   rejoin: () => { const c = lsGet(ROOMKEY); if (c) netOpen(c); },
   addBot: () => netSend({ t: 'addBot' }), kick: i => netSend({ t: 'kick', i }), lobbyDiff: k => netSend({ t: 'diff', k }),
@@ -1026,6 +1085,7 @@ window.UI = {
 };
 
 initTg();
+applyTheme(wallet().theme);
 drawStart();
 { const sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || new URLSearchParams(location.search).get('room');
   if (sp && /^[A-Za-z0-9]{4,8}$/.test(sp)) netOpen(sp.toUpperCase()); }
