@@ -18,27 +18,21 @@
   <!-- СТАРТ -->
   <div class="screen" id="scrStart">
     <div class="start">
-      <div class="logo">🐹🎡</div>
-      <h1>Выберись из колеса</h1>
-      <p class="sub">Вырвись из колеса, раскрути бизнес до потока $100 000 в месяц и купи мечту раньше Ани и Макса.</p>
+      <div class="logo">🎡</div>
+      <h1>Колесо</h1>
+      <p class="sub">Вырвись из гонки за зарплатой и купи мечту первым.</p>
       <div id="contBox"></div>
       <div class="lbl">Сложность</div>
       <div class="seg" id="diffSeg"></div>
       <div class="diffnote" id="diffNote"></div>
-      <div class="lbl">Режим</div>
-      <div class="seg" id="modeSeg"></div>
-      <div class="diffnote" id="modeNote" style="min-height:0"></div>
       <div class="lbl">Профессия</div>
+      <div class="seg" id="modeSeg"></div>
       <div id="profList"></div>
-      <div class="howto">
-        <b>Круг 1. Колесо.</b> Работаешь, чтобы жить. Покупай активы, пока пассивный доход не покроет расходы. Мешают инфляция, соблазны и прогорающие бизнесы. Кредит помогает, но платёж съедает поток, так что считай. 🎲 Темки дают 10–20 тысяч или оставляют без денег и с долгом коллекторам. Во вкладке «Учёба» можно прокачать навыки: учёба стоит денег и хода.<br><br>
-        <b>Круг 2. Средний.</b> Капитал работает на тебя. Сети, производства, бизнес-события и крупные темки. Каждая покупка умножает поток. Цель — <b>$100 000 в месяц</b>.<br><br>
-        <b>Круг 3. Большая игра.</b> Кредитов нет. Выкупай компании с биржи, разгоняй и обваливай акции (берегись ФАС), инвестируй и купи мечту на её клетке. <b>Кто первым это сделает, тот и выиграл.</b><br><br>
-        <b>Биржа.</b> Новости двигают цены за два следующих броска. Успей купить или продать до них. Слухи сбываются не всегда.
-      </div>
-      <button class="testlink" onclick="UI.debugMid()">🧪 Тест: сразу на средний круг</button>
-      <button class="testlink" style="margin-top:4px" onclick="UI.debugFast()">🧪 Тест: сразу в Большую игру</button>
-      <div style="text-align:center;font-size:11px;color:var(--hint);margin-top:10px;opacity:.7">Версия 0.6 · 20.11.2026</div>
+      <div class="startbtns"><button class="b sec" onclick="UI.showRules()">Правила</button><button class="b sec" onclick="UI.showAch()" id="achBtn">Достижения</button></div>
+      <details class="qh" style="margin-top:12px"><summary>Для теста</summary><div>
+        <button class="testlink" onclick="UI.debugMid()">Сразу на средний круг</button>
+        <button class="testlink" style="margin-top:4px" onclick="UI.debugFast()">Сразу в Большую игру</button></div></details>
+      <div style="text-align:center;font-size:11px;color:var(--hint);margin-top:10px;opacity:.7">Версия 0.7 · 21.11.2026</div>
     </div>
   </div>
 
@@ -66,17 +60,7 @@
     </div>
     <div class="view" id="v-board">
       <div class="newsbar" id="newsbar" onclick="UI.switchView('ex')"></div>
-      <div class="board-wrap">
-        <div class="board" id="board">
-          <div class="center">
-            <div class="ctitle" id="cTitle">Колесо</div>
-            <div class="dice" id="dice">🎲</div>
-            <div class="lastmsg" id="lastMsg"></div>
-            <div class="race" id="race"></div>
-          </div>
-        </div>
-      </div>
-      <div class="legend" id="legend"></div>
+      <div class="tablewrap" id="tableWrap"></div>
     </div>
     <div class="view hidden" id="v-ex"><div class="ex" id="ex"></div></div>
     <div class="view hidden" id="v-edu"><div class="rep" id="edu"></div></div>
@@ -93,6 +77,7 @@
 
 <script src="data.js"></script>
 <script src="engine.js"></script>
+<script src="table.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>

@@ -42,18 +42,16 @@ function drawStart() {
     ? `<button class="b contbtn" onclick="UI.resume()">▶ Продолжить партию (${sv.S.players[0].profName}, ход ${sv.S.players[0].turns})</button>` : '';
   $('diffSeg').innerHTML = Object.entries(D.DIFF).map(([k, v]) => `<button class="${k === diffSel ? 'on' : ''}" onclick="UI.setDiff('${k}')">${v.n}</button>`).join('');
   $('diffNote').textContent = D.DIFF[diffSel].note;
-  $('modeSeg').innerHTML = [['pick', '👆 Выбрать профессию'], ['random', '🎲 Случайная']].map(([k, n]) => `<button class="${k === profMode ? 'on' : ''}" onclick="UI.setMode('${k}')">${n}</button>`).join('');
-  $('modeNote').textContent = profMode === 'pick' ? 'Выбери, кем начнёшь. У каждой профессии свой бонус.' : 'Кубик решит, кем ты будешь. Профессии уравнены бонусами, так что шанс есть у всех.';
+  $('modeSeg').innerHTML = [['pick', 'Выбрать'], ['random', 'Случайно']].map(([k, n]) => `<button class="${k === profMode ? 'on' : ''}" onclick="UI.setMode('${k}')">${n}</button>`).join('');
+  const got = achGot(); $('achBtn').textContent = `Достижения ${D.ACH.filter(a => got[a.id]).length}/${D.ACH.length}`;
   if (profMode === 'random') {
-    $('profList').innerHTML = `<button class="b" style="width:100%;margin-bottom:10px;font-size:16px;padding:16px" onclick="UI.startRandom()">🎲 Бросить кубик профессии</button>
-      <div class="note" style="text-align:center">Возможные профессии: ${D.PROFS.map(p => p.e).join(' ')}</div>`;
+    $('profList').innerHTML = `<button class="b" style="width:100%;margin:6px 0 4px;font-size:16px;padding:15px" onclick="UI.startRandom()">Бросить кубик профессии</button>`;
     return;
   }
   $('profList').innerHTML = D.PROFS.map(p => {
     const ex = p.exp.reduce((s, e) => s + e[1], 0);
     return `<button class="prof" onclick="UI.start('${p.id}')"><div class="pe">${p.e}</div><div><div class="pn">${p.n}</div>
-    <div class="pd">Зарплата ${money(p.salary)} · расходы ${money(ex)} · поток +${money(p.salary - ex)}</div>
-    <div class="pd" style="color:#9fd0a0">★ ${p.bonus}</div></div></button>`;
+    <div class="pd">Поток +${money(p.salary - ex)} · ${p.bonus}</div></div></button>`;
   }).join('');
 }
 function showStart() {
@@ -71,6 +69,16 @@ function start(prof) {
   S = E.newGame({ prof, diff: diffSel, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) | 0, name: tgName() });
   seenLog = 0; seenNews = 0;
   showGame(); setLast('Бросай кубик, чтобы начать'); save(); render();
+}
+function showRules() {
+  const w = $('win'); w.className = 'win';
+  w.innerHTML = `<h2 style="margin-top:4px">Правила</h2><div class="rules">
+    <p><b>1. Колесо.</b> Покупай активы, пока пассивный доход не покроет расходы.</p>
+    <p><b>2. Средний круг.</b> Расти бизнесом до потока $100 000 в месяц.</p>
+    <p><b>3. Большая игра.</b> Купи мечту или удвой поток раньше соперников.</p>
+    <p>Перейти на следующий круг можно только без долгов. Темки — риск: куш или долг коллекторам. Учёба занимает ход. Биржа живёт на новостях.</p></div>
+    <button class="b sec" style="width:100%" onclick="UI.closeAch()">Понятно</button>`;
+  w.classList.remove('hidden');
 }
 function startRandom() {
   const box = $('profList'); let k = 0;
@@ -117,10 +125,10 @@ function dispatch(a) {
     if (roll && roll.t === 'roll') {
       const p = S.players[roll.pid];
       const T = roll.mode === 'fast' ? D.FT[D.FCELLS[p.pos]] : roll.mode === 'mid' ? D.MT[D.MCELLS[p.pos]] : D.CT[D.CELLS[p.pos]];
-      setLast(roll.pid === ME ? `${T.e} <b>${T.h.split(':')[0]}</b>` : `${p.name}: выпало ${roll.steps} → ${T.e} ${T.n}`);
+      setLast(roll.pid === ME ? `<b>${T.h.split(':')[0]}</b>` : `${p.name}: ${roll.steps} → ${T.n}`);
     }
     if (roll && roll.t === 'skip') setLast(`${nameOf(roll.pid)}: <b>пропуск хода</b>`);
-    save(); render();
+    save(); render(); achCheck();
     if (myToasts.length) toast(myToasts[myToasts.length - 1]);
     if (S.phase === 'over' && S.result.type === 'win' && S.result.pid === ME) haptic('ok');
     kickBots();
@@ -139,21 +147,20 @@ function kickBots() {
 function animateRoll(e, cb) {
   const p = S.players[e.pid], mine = e.pid === ME, me = S.players[ME];
   const visible = e.mode === me.mode;
-  const dice = $('dice'); dice.classList.add('spin');
   if (mine) haptic('medium');
   let k = 0;
   const iv = setInterval(() => {
-    dice.textContent = e.dice.map(() => FACES[Math.floor(Math.random() * 6)]).join('');
+    KolesoTable.dice(e.dice.map(() => 1 + Math.floor(Math.random() * 6)), true);
     if (++k > (mine ? 8 : 4)) {
-      clearInterval(iv); dice.classList.remove('spin');
-      dice.textContent = e.dice.map(d => FACES[d - 1]).join('');
-      setLast(mine ? `Выпало <b>${e.steps}</b>` : `${p.name}: выпало <b>${e.steps}</b>`);
+      clearInterval(iv);
+      KolesoTable.dice(e.dice, false);
+      setLast(mine ? `Выпало <b>${e.steps}</b>` : `${p.name}: <b>${e.steps}</b>`);
       if (!visible) return setTimeout(cb, 200);
       step(0);
     }
   }, 70);
   function step(i) {
-    anim = { pid: e.pid, pos: (e.from + i + 1) % D.CELLS.length }; renderTokens();
+    anim = { pid: e.pid, pos: (e.from + i + 1) % ringOf(p)[0].length }; renderTokens();
     if (i + 1 < e.steps) setTimeout(() => step(i + 1), mine ? 150 : 80);
     else setTimeout(() => { anim = null; cb(); }, mine ? 250 : 150);
   }
@@ -167,19 +174,21 @@ function render() {
   if (builtKey !== me.mode + '|' + me.dream) buildBoard();
   $('hAva').textContent = me.emoji; $('hProf').textContent = me.profName; $('hTurn').textContent = me.turns; $('hDiff').textContent = D.DIFF[S.diff].n;
   $('hMode').innerHTML = fast ? '<span class="modetag">БОЛЬШАЯ ИГРА</span>' : mid ? '<span class="modetag mid">СРЕДНИЙ КРУГ</span>' : '';
-  $('hCash').textContent = money(me.cash);
+  const hm = v => Math.abs(v) >= 1e5 ? shortMoney(v) : money(v);
+  $('hCash').textContent = hm(me.cash);
   if (!fast) {
     const f = C.cashflow(S, me), fr = C.progress(S, me);
-    $('hFlow').textContent = (f >= 0 ? '+' : '') + money(f); $('hFlow').className = 'v ' + (f >= 0 ? 'g' : 'r'); $('hFlowL').textContent = 'поток / мес';
-    $('hGoalTxt').innerHTML = mid ? `До Большой игры: поток ${money(f)} из ${money(D.RULES.fastFlow)}` : `Свобода: пассивный ${money(C.passive(S, me))} из ${money(C.expenses(S, me))}`;
+    $('hFlow').textContent = (f >= 0 ? '+' : '') + hm(f); $('hFlow').className = 'v ' + (f >= 0 ? 'g' : 'r'); $('hFlowL').textContent = 'поток / мес';
+    $('hGoalTxt').innerHTML = mid ? `Цель: поток ${money(D.RULES.fastFlow)}` : `Цель: пассивный ${money(C.passive(S, me))} из ${money(C.expenses(S, me))}`;
     $('hPct').textContent = fr + '%'; $('hBar').style.width = fr + '%';
-    $('hGoalSub').textContent = C.loanTotal(me) ? `Долг ${money(C.loanTotal(me))} · платёж ${money(C.loanPay(me))}/мес · ставка для тебя ${pct(C.rateFor(S, me))}` : `Ставка банка для тебя ${pct(C.rateFor(S, me))} в месяц`;
+    const goal = mid ? f >= D.RULES.fastFlow : C.passive(S, me) >= C.expenses(S, me);
+    $('hGoalSub').innerHTML = C.loanTotal(me) ? (goal ? `<span class="gate">🔒 Закрой долги ${money(C.loanTotal(me))}, чтобы перейти</span>` : `Долг ${money(C.loanTotal(me))} · −${money(C.loanPay(me))}/мес`) : '';
   } else {
     const dr = D.DREAMS[me.dream], fp = C.fProgress(S, me);
-    $('hFlow').textContent = '+' + money(me.fflow); $('hFlow').className = 'v y'; $('hFlowL').textContent = 'за 💰';
-    $('hGoalTxt').innerHTML = `Мечта ${dr.e} ${dr.n}: ${money(me.cash)} из ${money(me.dreamCost)}`;
+    $('hFlow').textContent = '+' + hm(me.fflow); $('hFlow').className = 'v y'; $('hFlowL').textContent = 'за выплату';
+    $('hGoalTxt').innerHTML = `${dr.n}: ${shortMoney(me.cash)} из ${shortMoney(me.dreamCost)}`;
     $('hPct').textContent = fp + '%'; $('hBar').style.width = fp + '%';
-    $('hGoalSub').textContent = `или подними поток до ${money(C.fTarget(me))} (сейчас ${money(me.fflow)})`;
+    $('hGoalSub').textContent = `или поток ${shortMoney(C.fTarget(me))}`;
   }
   if (lastCash !== null && lastCash !== me.cash && !anim) floatTxt(me.cash - lastCash);
   lastCash = me.cash;
@@ -198,69 +207,78 @@ function render() {
   // главная кнопка
   const rb = $('rollBtn');
   if (S.phase === 'over') { rb.disabled = true; rb.textContent = 'Партия окончена'; }
-  else if (S.phase === 'exit') { rb.disabled = true; rb.textContent = S.exitPid === ME ? 'Выбери мечту' : `⏳ ${nameOf(S.exitPid)} выбирает мечту…`; }
-  else if (stageUI) { rb.disabled = true; rb.textContent = 'Средний круг!'; }
-  else if (S.cur !== ME) { rb.disabled = true; rb.textContent = `⏳ Ходит ${S.players[S.cur].name}…`; }
+  else if (S.phase === 'exit') { rb.disabled = true; rb.textContent = S.exitPid === ME ? 'Выбери мечту' : `${nameOf(S.exitPid)} выбирает мечту…`; }
+  else if (stageUI) { rb.disabled = true; rb.textContent = 'Средний круг'; }
+  else if (S.cur !== ME) { rb.disabled = true; rb.textContent = `Ходит ${S.players[S.cur].name}…`; }
   else if (S.phase === 'card') { rb.disabled = true; rb.textContent = 'Реши по карточке'; }
-  else { rb.disabled = busy; rb.textContent = me.skip > 0 ? `⏭ Пропустить ход (осталось ${me.skip})` : me.charity > 0 ? `🎲🎲 Бросить 2 кубика (${me.charity})` : '🎲 Бросить кубик'; }
+  else { rb.disabled = busy; rb.textContent = me.skip > 0 ? `Пропустить ход (${me.skip})` : me.charity > 0 ? `Бросить 2 кубика (${me.charity})` : 'Бросить кубик'; }
   renderSheet();
   renderOverlay();
 }
 
-function buildBoard() {
-  const me = S.players[ME], fast = me.mode === 'fast', mid = me.mode === 'mid';
-  const cells = fast ? D.FCELLS : mid ? D.MCELLS : D.CELLS, T = fast ? D.FT : mid ? D.MT : D.CT;
-  builtKey = me.mode + '|' + me.dream;
-  const b = $('board'); b.querySelectorAll('.cell').forEach(c => c.remove());
-  cells.forEach((t, i) => {
-    const d = document.createElement('div'), rc = cellRC(i);
-    d.className = 'cell'; d.id = 'c' + i; d.style.gridArea = `${rc[0]}/${rc[1]}`; d.style.background = T[t].c;
-    let e = T[t].e, n = T[t].n, help = T[t].h;
-    if (t === 'dream') {
-      const di = D.DREAM_CELLS.indexOf(i), dr = D.DREAMS[di]; e = dr.e; n = dr.n.split(' ')[0];
-      if (me.dream === di) { d.classList.add('mydream'); help = `Твоя мечта: ${dr.n}, ${money(me.dreamCost)}. Встань сюда с нужной суммой`; }
-      else help = `Чужая мечта: ${dr.n}`;
-    }
-    d.innerHTML = `${e}<span>${n}</span>`;
-    d.onclick = () => toast(`${e} ${help}`);
-    b.appendChild(d);
-  });
-  $('legend').innerHTML = Object.values(T).map(c => `<span>${c.e} ${c.n}</span>`).join('');
-  $('cTitle').textContent = fast ? '★ Большая игра' : mid ? '◆ Средний круг' : 'Колесо';
+/* ---------- стол ---------- */
+const shortMoney = n => { const a = Math.abs(n), sg = n < 0 ? '−' : ''; return a >= 1e6 ? `${sg}$${(a / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',')}M` : a >= 1e4 ? `${sg}$${Math.round(a / 1000)}k` : a >= 1000 ? `${sg}$${(a / 1000).toFixed(1).replace('.', ',')}k` : `${sg}$${Math.round(a)}`; };
+const ringOf = me => me.mode === 'fast' ? [D.FCELLS, D.FT] : me.mode === 'mid' ? [D.MCELLS, D.MT] : [D.CELLS, D.CT];
+let lastHTML = '';
+
+/* ---------- достижения ---------- */
+const ACH_KEY = 'koleso-ach-v1';
+const achGot = () => { try { return JSON.parse(localStorage.getItem(ACH_KEY)) || {}; } catch (e) { return {}; } };
+function achCheck() {
+  if (!S) return;
+  const me = S.players[ME], st = me.stats || {}, r = S.result, won = r && r.type === 'win' && r.pid === ME;
+  const ok = {
+    mid: me.mode !== 'rat', fast: me.mode === 'fast', win: won, hard: won && S.diff === 'hard',
+    magnate: won && r.how === 'flow', smart: D.SKILLS.every(k => C.has(me, k.id)),
+    broker: (st.sp || 0) >= 50000, hamster: !!st.hmk, gambler: (st.gw || 0) >= 5,
+    quick: me.mode !== 'rat' && me.midAt <= 25, noloan: !!st.midNoLoan && me.mode !== 'rat',
+    collector: !!st.shady && me.mode !== 'rat', raider: (st.co || 0) >= 3, manip: (st.camp || 0) >= 3, fas: !!st.fas,
+    bankrupt: r && r.type === 'bankrupt' && r.pid === ME,
+  };
+  D.DREAMS.forEach((d, i) => { ok['dream' + i] = won && r.how === 'dream' && me.dream === i; });
+  const got = achGot(); let fresh = null;
+  D.ACH.forEach(a => { if (ok[a.id] && !got[a.id]) { got[a.id] = Date.now(); fresh = a; } });
+  if (fresh) { try { localStorage.setItem(ACH_KEY, JSON.stringify(got)); } catch (e) { /* ignore */ } setTimeout(() => toast(`${fresh.e} Достижение: ${fresh.n}`), 900); haptic('ok'); }
 }
-const SIDE = 9; // поле SIDE×SIDE, по краю 4×(SIDE−1) = 32 клетки
-function cellRC(i) {
-  const k = SIDE - 1;
-  if (i <= k) return [1, i + 1];
-  if (i <= 2 * k) return [i - k + 1, SIDE];
-  if (i <= 3 * k) return [SIDE, SIDE - (i - 2 * k)];
-  return [SIDE - (i - 3 * k), 1];
+function showAch() {
+  const got = achGot(), n = D.ACH.filter(a => got[a.id]).length, w = $('win');
+  w.className = 'win';
+  w.innerHTML = `<h2 style="margin-top:4px">Достижения</h2><p>${n} из ${D.ACH.length}</p>
+    <div class="achgrid">${D.ACH.map(a => `<div class="ach ${got[a.id] ? 'got' : ''}"><div class="ae">${got[a.id] ? a.e : '🔒'}</div><div><div class="an">${a.n}</div><div class="ad">${a.d}</div></div></div>`).join('')}</div>
+    <button class="b sec" style="width:100%" onclick="UI.closeAch()">Закрыть</button>`;
+  w.classList.remove('hidden');
+}
+function buildBoard() {
+  const me = S.players[ME], [cells, T] = ringOf(me);
+  builtKey = me.mode + '|' + me.dream;
+  KolesoTable.build($('tableWrap'), { mode: me.mode, cells, T, dreamCells: D.DREAM_CELLS, dreams: D.DREAMS, myDream: me.mode === 'fast' ? me.dream : null, onCell: cellInfo });
+  setLast(lastHTML);
+}
+function cellInfo(i) {
+  const me = S.players[ME], [cells, T] = ringOf(me), t = cells[i];
+  if (t === 'dream') { const di = D.DREAM_CELLS.indexOf(i), dr = D.DREAMS[di]; return toast(me.dream === di ? `Твоя мечта: ${dr.n}, ${money(me.dreamCost)}` : `Чужая мечта: ${dr.n}`); }
+  toast(T[t].h);
 }
 function renderTokens() {
-  document.querySelectorAll('.tok').forEach(t => t.remove());
-  document.querySelectorAll('.cell.here').forEach(c => c.classList.remove('here'));
   const me = S.players[ME];
-  for (const q of S.players) {
-    if (q.bankrupt || q.mode !== me.mode) continue;
-    const pos = anim && anim.pid === q.id ? anim.pos : q.pos, cell = $('c' + pos); if (!cell) continue;
-    if (q.id === ME) { cell.classList.add('here'); cell.insertAdjacentHTML('beforeend', `<div class="tok me">${q.emoji}</div>`); }
-    else cell.insertAdjacentHTML('beforeend', `<div class="tok b${(q.id - 1) % 2}" style="background:${q.color}">${q.emoji}</div>`);
-  }
+  const list = S.players.filter(q => !q.bankrupt && q.mode === me.mode)
+    .map(q => ({ pos: anim && anim.pid === q.id ? anim.pos : q.pos, color: q.id === ME ? '#2ea6ff' : q.color, me: q.id === ME }));
+  KolesoTable.tokens(list, anim && anim.pid === ME ? anim.pos : me.pos);
 }
 function renderRace() {
-  $('race').innerHTML = S.players.map(q => {
-    const v = q.bankrupt ? 0 : C.progress(S, q), fast = q.mode === 'fast', mid = q.mode === 'mid';
-    const nm = (q.id === ME ? 'Ты' : q.name) + (q.bankrupt ? ' 💀' : '');
-    const bg = fast ? 'linear-gradient(90deg,#f5a623,#f5d04a)' : mid ? 'linear-gradient(90deg,#1aa38a,#5fe0c4)' : (q.id === ME ? '#2ea6ff' : q.color);
-    return `<div class="race-row"><span class="nm">${fast ? '★ ' : mid ? '◆ ' : ''}${nm}</span><div class="bar"><i style="width:${v}%;background:${bg}"></i></div><span class="pc">${v}%</span></div>`;
-  }).join('') + `<div class="race-row" style="justify-content:center;color:var(--hint);margin-top:6px">◆ средний круг · ★ Большая игра</div>`;
+  const act = S.phase === 'exit' ? S.exitPid : S.cur;
+  KolesoTable.seats(S.players.map(q => ({
+    name: q.id === ME ? 'Ты' : q.name, emoji: q.emoji, color: q.id === ME ? '#2ea6ff' : q.color,
+    cashTxt: q.bankrupt ? 'банкрот' : shortMoney(q.cash), progress: q.bankrupt ? 0 : C.progress(S, q),
+    active: act === q.id && S.phase !== 'over', out: q.bankrupt, badge: q.mode === 'fast' ? '★' : q.mode === 'mid' ? '◆' : '', cash: q.cash,
+  })));
 }
 function renderNewsbar() {
   const n = S.news[S.news.length - 1];
   $('newsbar').innerHTML = n ? `<span class="nt ${n.rum ? 'rum' : 'off'}">${n.rum ? '🗣 СЛУХ' : '📰'}</span><span>${n.t}</span>`
     : '<span class="nt off">📰</span><span style="color:var(--hint)">Новостей пока нет. Следи за биржей</span>';
 }
-function setLast(h) { $('lastMsg').innerHTML = h; }
+function setLast(h) { lastHTML = h || ''; const el = $('lastMsg'); if (el) el.innerHTML = lastHTML; }
 function floatTxt(d) {
   const el = $('cashBox'), r = el.getBoundingClientRect(), a = $('app').getBoundingClientRect();
   const f = document.createElement('div'); f.className = 'float' + (d < 0 ? ' neg' : ''); f.textContent = (d > 0 ? '+' : '') + money(d);
@@ -268,6 +286,8 @@ function floatTxt(d) {
   setTimeout(() => f.remove(), 1100);
 }
 const riskTag = r => !r ? '' : (r >= 0.35 ? '<span class="risk hi">риск высокий</span>' : '<span class="risk md">риск средний</span>');
+const qh = (text, title) => `<details class="qh"><summary>${title || 'Подробнее'}</summary><div>${text}</div></details>`;
+const dieBox = v => `<div class="dice" style="justify-content:center;margin:6px 0">${KolesoTable.dieHTML(v)}</div>`;
 const rowsHTML = r => `<div class="rows">${r.map(x => `<div class="ln"><span class="s">${x[0]}</span><span class="${x[2] || ''}">${x[1]}</span></div>`).join('')}</div>`;
 
 /* ---------- отчёт ---------- */
@@ -278,10 +298,11 @@ function assetLine(a) {
     <small>доход +${money(a.flow)} · банку −${money(pay)} (кредит ${money(a.loan)} под ${pct(a.loanRate)})</small></span>
     <span class="${net >= 0 ? 'g' : 'r'}">${net >= 0 ? '+' : ''}${money(net)}</span></div>`;
 }
+const loanName = l => l.shady ? 'Коллекторы' : l.kind === 'cash' ? 'Потребкредит' : l.kind === 'edu' ? 'За учёбу' : 'Кредит';
 function renderReport() {
   const me = S.players[ME];
   if (me.mode === 'fast') return renderFastReport(me);
-  const midLine = me.mode === 'mid' ? `<div class="note">Цель среднего круга: денежный поток ${money(D.RULES.fastFlow)} в месяц. Сейчас ${money(C.cashflow(S, me))}. Сделки здесь считаются от твоего текущего потока: чем он больше, тем крупнее бизнесы.</div>` : '';
+  const midLine = me.mode === 'mid' ? `<div class="note">Бизнесы растут вместе с твоим потоком.</div>` : '';
   const pas = C.passive(S, me), ex = C.expenses(S, me), f = C.cashflow(S, me), fr = C.freedom(S, me);
   const inc = me.assets.filter(a => a.t !== 'stock'), st = me.assets.filter(a => a.t === 'stock');
   const ml = C.maxLoan(S, me);
@@ -301,25 +322,25 @@ function renderReport() {
   <div class="card"><h3>Расходы</h3>
     ${me.exp.map(e => `<div class="ln"><span class="s">${e[0]}</span><span>${money(e[1])}</span></div>`).join('')}
     ${me.children ? `<div class="ln"><span class="s">Дети (${me.children})</span><span>${money(me.children * me.child)}</span></div>` : ''}
-    ${me.loans.map(l => `<div class="ln"><span class="s">${l.shady ? '☠️ Долг коллекторам' : 'Кредит'} ${money(l.amt)} под ${pct(l.rate)}</span><span class="r">${money(l.amt * l.rate)}</span></div>`).join('')}
+    ${me.loans.map(l => `<div class="ln"><span class="s">${loanName(l)} ${money(l.amt)} · ${pct(l.rate)}</span><span class="r">${money(l.amt * l.rate)}</span></div>`).join('')}
     <div class="ln tot"><span>Итого</span><span class="r">${money(ex)}</span></div>
-    ${D.DIFF[S.diff].infl ? `<div class="note">Инфляция: каждые ${D.RULES.inflEvery} ходов «Прочие расходы» растут на ${D.DIFF[S.diff].infl * 100}%.</div>` : ''}
+    ${D.DIFF[S.diff].infl ? `<div class="note">Инфляция: +${D.DIFF[S.diff].infl * 100}% каждые ${D.RULES.inflEvery} ходов.</div>` : ''}
   </div>
   <div class="card"><h3>Активы</h3>
     ${inc.map(a => `<div class="ln"><span class="s">${a.e} ${a.n}</span><span>взнос ${money(a.down)}</span></div>`).join('')}
     ${st.map(a => `<div class="ln"><span class="s">${D.TICK[a.tk].e} ${a.tk} × ${a.shares}</span><span>${money(a.shares * S.prices[a.tk].p)}</span></div>`).join('')}
     ${!me.assets.length ? '<div class="empty">Пусто. Ищи сделки на 🏠 и 🏢 или зайди на биржу</div>' : ''}
-    <div class="note">Рискованные активы могут прогореть в любой день зарплаты.</div>
+    
   </div>
   <div class="card"><h3>Банк</h3>
-    <div class="ln"><span class="s">Ставка по новым кредитам</span><b class="y">${pct(C.rateFor(S, me))} в мес${C.has(me, 'credit') ? ' 🏦' : ''}</b></div>
-    <div class="ln"><span class="s">Общий долг</span><span>${money(C.loanTotal(me))}</span></div>
-    <div class="ln"><span class="s">Платёж всего</span><span>${money(C.loanPay(me))}/мес</span></div>
+    <div class="ln"><span class="s">Кредит под бизнес</span><b class="y">${pct(C.rateFor(S, me))}/мес</b></div>
+    <div class="ln"><span class="s">Потребкредит</span><b class="r">${pct(C.rateFor(S, me, 'cash'))}/мес</b></div>
+    <div class="ln"><span class="s">Долг · платёж</span><span>${money(C.loanTotal(me))} · ${money(C.loanPay(me))}/мес</span></div>
     <div class="loanbtns">
-      <button class="sbtn" onclick="UI.A('loan',{n:1000})" ${C.canBorrow(S, me, 1000) ? '' : 'disabled'}>+ Взять $1 000</button>
-      <button class="sbtn" onclick="UI.A('repay',{n:1000})" ${C.loanTotal(me) && me.cash >= 1000 ? '' : 'disabled'}>− Погасить $1 000</button>
+      <button class="sbtn" onclick="UI.A('loan',{n:1000})" ${C.canBorrow(S, me, 1000, 'cash') ? '' : 'disabled'}>Потребкредит $1 000</button>
+      <button class="sbtn" onclick="UI.A('repay',{n:Math.min(${Math.floor(me.cash)}, ${C.loanTotal(me)})})" ${C.loanTotal(me) && me.cash >= 1 ? '' : 'disabled'}>Погасить ${money(Math.min(me.cash, C.loanTotal(me)))}</button>
     </div>
-    <div class="note">Каждый кредит сохраняет свою ставку. Гасится сначала самый дорогой (долг коллекторам — в первую очередь). ${C.canBorrow(S, me, 1000) ? 'Банк одобрит ещё ' + (ml === Infinity ? 'сколько угодно' : money(ml)) + '.' : '🚫 Банк отказывает: после платежа поток уйдёт ниже нормы.'}</div>
+    ${qh('Кредит под бизнес выдаётся при покупке сделки. Потребкредит — просто деньги на руки, он очень дорогой. Чем больше уже должен, тем выше ставка. Гасится сначала самый дорогой долг. На следующий круг можно перейти только без долгов.', 'Как работают кредиты')}
   </div>
   <button class="testlink" onclick="UI.restart(this)">↺ Бросить партию и начать заново</button>`;
 }
@@ -331,7 +352,7 @@ function renderFastReport(me) {
     <div class="ln"><span class="s">Стартовый поток</span><span>${money(me.fstart)}</span></div>
     <div class="ln"><span class="s">Цель по потоку</span><span>${money(C.fTarget(me))}</span></div>
     <div class="bar"><i style="width:${Math.max(0, Math.min(100, (me.fflow - me.fstart) / (C.fTarget(me) - me.fstart) * 100))}%"></i></div>
-    <div class="note">Поток начисляется на каждой клетке 💰, в том числе когда проходишь мимо.</div>
+    
   </div>
   <div class="card"><h3>Мечта</h3>
     <div class="ln"><span>${dr.e} ${dr.n}</span><span class="y">${money(me.dreamCost)}</span></div>
@@ -343,7 +364,7 @@ function renderFastReport(me) {
     ${me.finv.map(a => `<div class="ln"><span class="s">${a.e} ${a.n}</span><span class="g">+${money(a.flow)}</span></div>`).join('') || '<div class="empty">Пока нет. Ищи 🏭</div>'}
   </div>
   <div class="card"><h3>Правила Большой игры</h3>
-    <div class="note" style="margin:0">Кредитов нет. Иск забирает половину наличных, налоговая 30%, развод всё. Кризис разоряет одну инвестицию. Копить на мечту или вкладывать в поток? Решать тебе.</div>
+    <div class="note" style="margin:0">Без кредитов. Иск −50% наличных, налоговая −30%, развод −100%, санкции и обвал бьют по потоку и кэшу.</div>
   </div>
   <button class="testlink" onclick="UI.restart(this)">↺ Бросить партию и начать заново</button>`;
 }
@@ -352,7 +373,7 @@ function renderFastReport(me) {
 function renderEdu() {
   const me = S.players[ME], myMove = !busy && S.cur === ME && S.phase === 'roll';
   const P = D.PROFS.find(x => x.id === me.prof);
-  $('edu').innerHTML = `<div class="hint">${me.emoji} <b>${me.profName}</b>: ${P ? P.bonus : ''}</div><div class="hint">🎓 Учёба стоит денег и <b>занимает ход</b>: вместо броска кубика. Учиться можно только в свой ход. Навыки остаются с тобой на всех кругах.</div>
+  $('edu').innerHTML = `<div class="hint">${me.profName}: ${P ? P.bonus : ''}. Учёба стоит денег и занимает ход.</div>
   ${D.SKILLS.map(sk => {
     const got = C.has(me, sk.id), cost = C.skillCost(S, me, sk.id);
     return `<div class="skill ${got ? 'has' : ''}"><div class="se">${sk.e}</div><div style="flex:1"><div class="sn">${sk.n}</div><div class="sd">${sk.d}</div>
@@ -380,10 +401,10 @@ function renderEx() {
   const me = S.players[ME];
   $('ex').innerHTML = `
   <div class="card"><div class="rate"><div><h3 style="margin:0">Ставка по новым кредитам</h3>
-    <div class="note" style="margin-top:3px">Меняется решениями ЦБ. Твои кредиты: ${me.loans.map(l => money(l.amt) + ' под ' + pct(l.rate)).join(', ') || 'нет'}</div></div>
+    <div class="note" style="margin-top:3px">Под бизнес. Меняется решениями ЦБ.</div></div>
     <div class="bigr y">${pct(C.rateFor(S, me))}<div class="note" style="margin:0;text-align:right">в месяц</div></div></div></div>
   <div class="lbl">Новости</div>
-  ${C.has(me, 'trading') ? '' : '<div class="note" style="margin:-2px 2px 8px">Подсказки к новостям даёт навык 📈 «Биржевая торговля» во вкладке «Учёба».</div>'}
+  ${C.has(me, 'trading') ? '' : ''}
   ${S.news.slice(-6).reverse().map(n => `<div class="news"><span class="nt ${n.rum ? 'rum' : 'off'}">${n.rum ? '🗣 СЛУХ' : '📰 НОВОСТЬ'}</span> ${n.t}${n.status ? '' : newsHint(n)}<div class="meta">${n.status || '⏳ рынок ещё реагирует'}</div></div>`).join('') || '<div class="empty">Пока тихо</div>'}
   <div class="lbl">Котировки</div>
   ${Object.keys(D.TICK).map(tk => {
@@ -396,8 +417,8 @@ function renderEx() {
       <span>${own ? `У тебя ${own.shares.toLocaleString('ru-RU')} шт · <b class="${pl >= 0 ? 'g' : 'r'}">${pl >= 0 ? '+' : ''}${money(pl)}</b>` : ''}</span></div>
       <div class="tbtns"><button class="tb-buy" onclick="UI.trade('${tk}','buy')">Купить</button><button class="tb-sell" onclick="UI.trade('${tk}','sell')" ${own ? '' : 'disabled'}>Продать</button></div>${bigPanel(tk)}</div>`;
   }).join('')}
-  ${me.mode === 'fast' ? `<div class="hint">★ <b>Большая игра:</b> в свой ход до броска можно запустить одну кампанию: разогнать или обвалить акции на ${Math.round(D.RULES.pumpEffect * 100)}% за два броска. С шансом ${Math.round(D.RULES.pumpCatch * 100)}% ФАС заметит манипуляцию и оштрафует на двойную стоимость кампании. Ещё можно выкупить контрольный пакет: компания станет твоей и даст поток за каждые 💰. Совет: сначала обвали цену, потом выкупай.</div>` : ''}
-  <div class="note">Комиссия брокера 1% (у крипты 3%, минимум $5). Акции колеблются вокруг справедливой цены и не падают ниже 40% от неё: после плохой новости они постепенно восстанавливаются. Крипта не ограничена ничем. Цены меняются при каждом броске кубика любого игрока. Новость отыгрывается в цене за два следующих броска. Официальные новости надёжны, слухи сбываются примерно в 60% случаев. Дивиденды приходят в день зарплаты и входят в пассивный доход.</div>`;
+  ${me.mode === 'fast' ? qh(`В свой ход до броска: одна кампания (разгон или обвал на ${Math.round(D.RULES.pumpEffect * 100)}%, риск штрафа ФАС ${Math.round(D.RULES.pumpCatch * 100)}%) или выкуп контрольного пакета. Сначала обвал — потом выкуп.`, 'Влияние на рынок') : ''}
+  ${qh('Комиссия 1%, у крипты 3%. Акции не падают ниже 40% справедливой цены и потом восстанавливаются. ХомякКоин без ограничений и в среднем дешевеет. Новость отыгрывается за 2 броска, слухи сбываются не всегда.', 'Как устроена биржа')}`;
 }
 function bigPanel(tk) {
   const me = S.players[ME], q = S.prices[tk];
@@ -432,7 +453,7 @@ function stockSheet(tk, price, side, label, confirm) {
   return `<div class="kind" style="color:${buy ? '#4fd17b' : '#ff7a80'}">${label}</div>
   <div class="sh-e">${t.e}</div><div class="sh-t">${tk} по ${fmtP(price)}</div><div class="sh-d">${t.full}${price < q.p ? ` · на бирже ${fmtP(q.p)}` : ''}</div>
   ${rowsHTML([...(cr ? [] : [['Дивиденд на акцию', q.div ? fmtP(q.div) + ' за 💼' : 'нет'], ['Дивидендная доходность', q.div ? (q.div / price * 100).toFixed(1) + '% в мес' : '—', 'y'], ['Ставка банка', pct(C.rateFor(S, me)) + ' в мес']]), ...(own ? [['У тебя', own.shares.toLocaleString('ru-RU') + ' шт по ' + fmtP(own.buy)]] : [])])}
-  ${cr ? '<div class="hint">🐹 <b>Крипта:</b> без дна и потолка. В среднем ХомякКоин дешевеет с каждым броском, так что «купить и ждать» обычно проигрывает. Зарабатывают на коротких пампах.</div>' : ''}
+  ${cr ? '<div class="hint">Крипта без дна и потолка и в среднем дешевеет. Держать долго невыгодно.</div>' : ''}
   <div class="qty">${opts.map(o => `<button class="${o[0] === qtyUI ? 'on' : ''}" onclick="UI.setQty(${o[0]})">${o[1]}</button>`).join('') || `<div class="sh-d" style="margin:0;width:100%">${buy ? 'Не хватает денег' : 'Нечего продавать'}</div>`}</div>
   ${rowsHTML([['Количество', qtyUI.toLocaleString('ru-RU') + ' шт'], ['Сумма', money(val)], [`Комиссия ${Math.round((D.TICK[tk].fee || D.RULES.fee) * 100)}%`, money(f)], [buy ? 'Спишется' : 'Получишь', money(buy ? val + f : val - f), 'y'], ['Наличные', money(me.cash)]])}
   <div class="btns"><button class="b" style="${buy ? '' : 'background:#c0434a'}" onclick="${confirm}" ${!qtyUI ? 'disabled' : ''}>${buy ? 'Купить' : 'Продать'} ${qtyUI} шт</button>`;
@@ -483,8 +504,8 @@ function cardHTML(c) {
       const L = can ? full : need, okL = C.canBorrow(S, me, L), rate = C.rateFor(S, me);
       const hint = C.has(me, 'analytics') ? analyticsBlock(d, L, rate, can)
         : D.DIFF[S.diff].hints
-        ? `<div class="hint">💡 <b>Подсказка (лёгкий режим):</b> кредит ${money(L)} × ${pct(rate)} = платёж ${money(L * rate)}/мес против потока +${money(d.flow)}. Итог: <b class="${d.flow - L * rate >= 0 ? 'g' : 'r'}">${d.flow - L * rate >= 0 ? '+' : ''}${money(d.flow - L * rate)}/мес</b></div>`
-        : `<div class="hint">🧮 <b>Посчитай сам:</b> платёж по кредиту = сумма × ${pct(rate)} каждый месяц. Если платёж больше потока сделки, бизнес будет убыточным из-за кредита. Автоматический расчёт даёт навык 📊 «Бизнес-аналитика».</div>`;
+        ? `<div class="hint">В кредит: банку ${money(L * rate)}/мес → итог <b class="${d.flow - L * rate >= 0 ? 'g' : 'r'}">${d.flow - L * rate >= 0 ? '+' : ''}${money(d.flow - L * rate)}/мес</b></div>`
+        : qh(`Платёж по кредиту = сумма × ${pct(rate)} в месяц. Если он больше потока, бизнес в минусе. Расчёт делает навык «Бизнес-аналитика».`, 'Выгодно ли в кредит?');
       return `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.tier === 'sbiz' ? '#5fc8e0' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? '◆ Средний бизнес' : c.tier === 'sbiz' ? '🏬 Малый бизнес' : c.big ? '🏢 Крупная сделка' : '🏠 Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
       <div class="sh-e">${d.e}</div><div class="sh-t">${d.n}</div><div class="sh-d">${d.d}</div>
       ${rowsHTML([['Стоимость', money(d.price)], ['Первый взнос', money(d.down)],
@@ -526,25 +547,26 @@ function cardHTML(c) {
       const head = `<div class="kind" style="color:#ff5fb0">🎲 ${c.tier === 'mid' ? 'Крупная темка' : 'Темка'}</div><div class="sh-e">${g.e}</div><div class="sh-t">${g.n}</div>`;
       if (rs) {
         const txt = { win: ['g', `Темка зашла! +${money(rs.prize)}`], even: ['', 'Вышел в ноль, ставку вернули'], lose: ['r', `Не зашло: −${money(c.stake)}`],
-          zero: ['r', `Провал: сгорели все наличные (${money(rs.lost)})`], debt: ['r', `Провал: все наличные сгорели, и ещё долг коллекторам ${money(rs.debt)} под ${pct(D.RULES.shadyRate)} в месяц`] }[rs.o];
-        return head + `<div class="bigdie bubdie">${FACES[(rs.raw || rs.die) - 1]}</div>${rs.raw && rs.raw !== rs.die ? `<div class="sh-d" style="margin-top:-6px">🧠 +1 за критическое мышление → ${rs.die}</div>` : ''}<div class="sh-t ${txt[0]}" style="margin-bottom:10px;font-size:17px">${txt[1]}</div>
-        ${rs.o === 'debt' ? `<div class="hint">☠️ Платёж коллекторам ${money(rs.debt * D.RULES.shadyRate)}/мес уже в расходах. Гаси долг в «Отчёте», он гасится первым.</div>` : ''}
+          zero: ['r', `Сгорели все наличные: −${money(rs.lost)}`], debt: ['r', `Всё сгорело + долг ${money(rs.debt)}`] }[rs.o];
+        return head + `<div class="bubdie">${dieBox(rs.raw || rs.die)}</div>${rs.raw && rs.raw !== rs.die ? `<div class="sh-d" style="margin:-4px 0 4px">+1 за мышление → ${rs.die}</div>` : ''}<div class="sh-t ${txt[0]}" style="margin-bottom:10px;font-size:17px">${txt[1]}</div>
+        ${rs.o === 'debt' ? `<div class="hint">Платёж коллекторам −${money(rs.debt * D.RULES.shadyRate)}/мес. Гаси в «Отчёте».</div>` : ''}
         <div class="btns">${btn('Дальше', "UI.A('ok')", 'sec')}</div>`;
       }
-      const names = { win: '🤑 куш', even: '😐 в ноль', lose: '💸 ставка сгорела', zero: '💀 сгорят ВСЕ наличные', debt: '☠️ все наличные + долг' };
+      const names = { win: 'куш', even: 'ноль', lose: '−вход', zero: 'всё', debt: 'долг' };
       const crit = C.has(me, 'critical');
-      return head + `<div class="sh-d">${g.d}</div>${crit ? '<div class="hint">🧠 <b>Критическое мышление:</b> +1 к броску. Таблица ниже уже с учётом навыка.</div>' : ''}
-      ${rowsHTML([['Вход', money(c.stake)], ['Возможный куш', `${unit(g.win[0])}–${unit(g.win[1])}`, 'g'], ['Возможный долг', `${unit(g.debt[0])}–${unit(g.debt[1])} под ${pct(D.RULES.shadyRate)}`, 'r'], ['У тебя на руках', money(me.cash)]])}
-      <div class="rows">${g.out.map((o, i) => `<div class="ln"><span class="s">${FACES[i]}</span><span>${names[g.out[Math.min(5, i + (crit ? 1 : 0))]]}</span></div>`).join('')}</div>
-      <div class="btns">${me.cash >= c.stake ? btn(`Зайти в темку за ${money(c.stake)}`, "UI.A('gamble')", 'warn') : btn(`Не хватает ${money(c.stake - me.cash)}`, '', '', true)}${btn('Не, я пас', "UI.A('pass')", 'sec')}</div>`;
+      return head + `<div class="sh-d">${g.d}</div>
+      ${rowsHTML([['Вход', money(c.stake)], ['Куш', `${unit(g.win[0])}–${unit(g.win[1])}`, 'g'], ['Долг', `${unit(g.debt[0])}–${unit(g.debt[1])}`, 'r'], ['На руках', money(me.cash)]])}
+      <div class="ostrip">${g.out.map((o, i) => { const oo = g.out[Math.min(5, i + (crit ? 1 : 0))]; return `<span class="o-${oo}">${i + 1}<small>${names[oo]}</small></span>`; }).join('')}</div>
+      ${qh(`Исход зависит от броска. «Всё» — сгорают все наличные. «Долг» — ещё и долг коллекторам под ${pct(D.RULES.shadyRate)} в месяц.${crit ? ' Мышление уже даёт +1 к броску.' : ''}`, 'Как это работает')}
+      <div class="btns">${me.cash >= c.stake ? btn(`Зайти за ${money(c.stake)}`, "UI.A('gamble')", 'warn') : btn(`Не хватает ${money(c.stake - me.cash)}`, '', '', true)}${btn('Пас', "UI.A('pass')", 'sec')}</div>`;
     }
     case 'gig':
       return `<div class="kind" style="color:#7fd16a">🛠 Подработка</div><div class="sh-e">🛠</div><div class="sh-t">Подвернулась подработка</div>
-      <div class="sh-d">Выходные ушли на халтуру, зато деньги сразу на руки.</div>
+      <div class="sh-d">Деньги сразу на руки.</div>
       ${rowsHTML([['Заработано', '+' + money(c.amt), 'g'], ['На руках', money(me.cash)]])}<div class="btns">${btn('Отлично 💪', "UI.A('ok')")}</div>`;
     case 'course':
       return `<div class="kind" style="color:#6ab3f3">🎓 Курсы</div><div class="sh-e">🎓</div><div class="sh-t">Повышение квалификации</div>
-      <div class="sh-d">Заплати сейчас, и зарплата вырастет навсегда. Окупится за ${Math.ceil(c.cost / c.raise)} зарплат.</div>
+      <div class="sh-d">Зарплата вырастет навсегда. Окупится за ${Math.ceil(c.cost / c.raise)} зарплат.</div>
       ${rowsHTML([['Стоимость', money(c.cost)], ['Прибавка к зарплате', '+' + money(c.raise) + '/мес', 'g'], ['На руках', money(me.cash)]])}
       <div class="btns">${btn(`Учиться за ${money(c.cost)}`, "UI.A('buy')", '', me.cash < c.cost)}${btn('Некогда', "UI.A('pass')", 'sec')}</div>`;
     case 'expand': {
@@ -584,21 +606,21 @@ function cardHTML(c) {
       ${rowsHTML([['Оплачено', money(c.cost), 'r'], ['Осталось на руках', money(me.cash)]])}<div class="btns">${btn('Положение обязывает 😎', "UI.A('ok')", 'warn')}</div>`;
       return `<div class="kind" style="color:#ff6b81">🛍 Соблазн</div><div class="sh-e">${c.t.e}</div><div class="sh-t">${c.t.n}</div><div class="sh-d">${c.t.d}</div>
       ${rowsHTML([['Оплачено', money(c.cost), 'r'], ['Осталось на руках', money(me.cash)]])}
-      <div class="btns">${btn('Эх 😩', "UI.A('ok')", 'warn')}</div><div class="sh-d" style="margin-top:10px;font-size:12px">Соблазны обязательны. Так работает колесо.</div>`;
+      <div class="btns">${btn('Эх 😩', "UI.A('ok')", 'warn')}</div>`;
     case 'child':
       return c.added ? `<div class="kind" style="color:#d68cff">👶 Пополнение</div><div class="sh-e">👶</div><div class="sh-t">У тебя родился ребёнок!</div>
       <div class="sh-d">Поздравляем! Расходы выросли на ${money(me.child)}/мес навсегда.</div><div class="btns">${btn('Ура! 🍼', "UI.A('ok')")}</div>`
         : `<div class="kind" style="color:#d68cff">👶 Пополнение</div><div class="sh-e">👨‍👩‍👧‍👦</div><div class="sh-t">У тебя уже трое детей</div><div class="sh-d">Больше не надо, спасибо.</div><div class="btns">${btn('Дальше', "UI.A('ok')")}</div>`;
     case 'down':
       if (c.nofire) return `<div class="kind" style="color:#aab">🚫 Увольнение</div><div class="sh-e">🚕</div><div class="sh-t">Заказов почти нет</div>
-      <div class="sh-d">Ты самозанятый, тебя не уволить. Плохой месяц: половина расходов из кармана, но ходы не пропускаешь.</div>
+      <div class="sh-d">Тебя не уволить. Половина расходов из кармана, ходы не пропускаешь.</div>
       ${rowsHTML([['Оплачено', money(c.paid), 'r']])}<div class="btns">${btn('Прорвёмся', "UI.A('ok')", 'sec')}</div>`;
       return `<div class="kind" style="color:#aab">🚫 Увольнение</div><div class="sh-e">📦</div><div class="sh-t">Тебя сократили</div>
-      <div class="sh-d">Оплати месяц расходов без зарплаты и пропусти 2 хода. Пассивный доход продолжает капать, поэтому он и нужен.</div>
+      <div class="sh-d">Месяц расходов без зарплаты и 2 хода пропуска.</div>
       ${rowsHTML([['Оплачено', money(c.paid), 'r']])}<div class="btns">${btn('Эх…', "UI.A('ok')", 'sec')}</div>`;
     case 'charity':
       return `<div class="kind" style="color:#ff7ab6">❤️ Помощь</div><div class="sh-e">🤲</div><div class="sh-t">Поддержать фонд?</div>
-      <div class="sh-d">Отдай 10% зарплаты и следующие 3 хода бросай два кубика. Будешь быстрее находить сделки.</div>
+      <div class="sh-d">10% зарплаты — и 3 хода бросаешь два кубика.</div>
       ${rowsHTML([['Пожертвование', money(c.cost)], ['У тебя на руках', money(me.cash)]])}
       <div class="btns">${btn(`Помочь ${money(c.cost)}`, "UI.A('buy')", '', me.cash < c.cost)}${btn('Не сейчас', "UI.A('pass')", 'sec')}</div>`;
     case 'invest': {
@@ -611,12 +633,12 @@ function cardHTML(c) {
       if (c.result) {
         const w = c.result.win;
         return `<div class="kind" style="color:#a58cff">🎰 Венчур</div><div class="sh-e">${c.v.e}</div><div class="sh-t">${c.v.n}</div>
-        <div class="bigdie bubdie">${FACES[c.result.die - 1]}</div>
+        <div class="bubdie">${dieBox(c.result.die)}</div>
         <div class="sh-t ${w ? 'g' : 'r'}" style="margin-bottom:10px">${w ? 'Выиграл ' + money(w) + '!' : 'Стартап закрылся 💀'}</div>
         <div class="btns">${btn('Дальше', "UI.A('ok')", 'sec')}</div>`;
       }
       return `<div class="kind" style="color:#a58cff">🎰 Венчур</div><div class="sh-e">${c.v.e}</div><div class="sh-t">${c.v.n}</div>
-      <div class="sh-d">Вложи и брось кубик. 🎲 6: ×8, 🎲 5: ×4, иначе деньги сгорают.</div>
+      <div class="sh-d">Брось кубик: 6 — ×8, 5 — ×4, иначе всё сгорит.</div>
       ${rowsHTML([['Ставка', money(c.cost)], ['Шанс выигрыша', '33%', 'y'], ['Наличные', money(me.cash)]])}
       <div class="btns">${me.cash >= c.cost ? btn(`Вложить ${money(c.cost)} и бросить`, "UI.A('venture')", 'gold') : btn(`Не хватает ${money(c.cost - me.cash)}`, '', '', true)}${btn('Не рисковать', "UI.A('pass')", 'sec')}</div>`;
     }
@@ -630,6 +652,11 @@ function cardHTML(c) {
       const t = D.DISASTER_TEXT[c.key];
       return `<div class="kind" style="color:var(--red)">${t[0]} Удар судьбы</div><div class="sh-e">${t[0]}</div><div class="sh-t">${t[1]}</div><div class="sh-d">${t[2]}</div>
       ${rowsHTML([['Потеряно', money(c.loss), 'r'], ['Осталось', money(me.cash)]])}<div class="btns">${btn('Переживу', "UI.A('ok')", 'sec')}</div>`;
+    }
+    case 'hit': {
+      const t = D.FT[c.key];
+      return `<div class="kind" style="color:var(--red)">Удар по бизнесу</div><div class="sh-e">${KolesoTable.svgIcon(KolesoTable.CELL_ICON[c.key], 'bigic')}</div><div class="sh-t">${t.n}</div><div class="sh-d">${t.h.split(': ')[1] || ''}</div>
+      <div class="sh-d r">${c.note}</div><div class="btns">${btn('Дальше', "UI.A('ok')", 'sec')}</div>`;
     }
     case 'crisis':
       return `<div class="kind" style="color:#aab">🌪 Кризис</div><div class="sh-e">🌪</div><div class="sh-t">Экономический кризис</div>
@@ -678,17 +705,17 @@ function renderOverlay() {
   if (key === 'stage') {
     w.className = 'win';
     w.innerHTML = `<div class="big">🎉</div><h2>Ты вышел из колеса!</h2>
-    <p>Пассивный доход покрывает расходы. Теперь ты не работаешь, чтобы жить, а приумножаешь капитал.</p>
+    <p>Капитал работает на тебя. Добро пожаловать в покерный клуб.</p>
     <div class="storycard" style="background:linear-gradient(135deg,#1aa38a,#2e6bff)"><div class="k">Колесо · ${me.emoji} ${me.profName} · ${D.DIFF[S.diff].n}</div><div class="v">Свобода за ${me.midAt || me.turns} ходов</div>
       <div class="grid"><div><div class="k">Пассивный доход</div><div class="v">${money(C.passive(S, me))}</div></div><div><div class="k">Поток</div><div class="v">${money(C.cashflow(S, me))}</div></div></div></div>
-    <div class="howto" style="text-align:left;margin:0 0 14px"><b>◆ Средний круг.</b> Здесь сети и производства. Их цена и доход считаются от твоего текущего потока, так что каждая покупка умножает его. Цель — поток <b>${money(D.RULES.fastFlow)} в месяц</b>, тогда откроется Большая игра. Осторожно с крупными темками.</div>
+    <div class="note" style="margin:0 0 14px;text-align:center">Цель — поток <b>${money(D.RULES.fastFlow)}</b> в месяц без долгов.</div>
     <div class="btns"><button class="b" onclick="UI.closeStage()">Вперёд ◆</button><button class="b sec" onclick="UI.share()">📤 Поделиться в сторис</button></div>`;
     confetti(); haptic('ok');
   } else if (key === 'exit') {
     const U = Math.max(1000, C.passive(S, me) * D.RULES.fastMult);
     w.className = 'win';
     w.innerHTML = `<div class="big">🏆</div><h2>Поток $100 000 в месяц!</h2>
-    <p>Средний круг пройден. Ты в Большой игре: здесь выкупают компании, двигают рынок и покупают мечты.</p>
+    <p>Ты в Большой игре. Выбери мечту.</p>
     <div class="storycard"><div class="k">Колесо · ${me.emoji} ${me.profName} · ${D.DIFF[S.diff].n}</div><div class="v">Большая игра за ${me.turns} ходов</div>
       <div class="grid"><div><div class="k">Поток</div><div class="v">${money(C.cashflow(S, me))}</div></div><div><div class="k">Активов</div><div class="v">${me.assets.length}</div></div></div></div>
     <div class="lbl" style="align-self:flex-start">Выбери мечту</div>
@@ -744,6 +771,7 @@ $('rollBtn').onclick = () => A('roll');
 window.UI = {
   A, toast, switchView, start, resume, debugFast, trade,
   setDiff: k => { diffSel = k; drawStart(); },
+  showAch, showRules, closeAch: () => { $('win').classList.add('hidden'); overlayKey = null; if (S) render(); else drawStart(); },
   setMode: k => { profMode = k; drawStart(); },
   startRandom,
   setQty: n => { qtyUI = n; render(); },
