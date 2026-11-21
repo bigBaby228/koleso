@@ -11,7 +11,7 @@ const $ = id => document.getElementById(id);
 const tgRaw = window.Telegram && window.Telegram.WebApp;
 const tg = tgRaw && tgRaw.initData ? tgRaw : null; // null, если открыто не в Telegram
 
-let S = null, busy = false, view = 'board', diffSel = 'normal', profMode = 'pick';
+let S = null, busy = false, view = 'board', diffSel = 'normal', profMode = 'random';
 let stageUI = null, seenLog = 0, seenNews = 0, tradeUI = null, qtyUI = null, anim = null, lastCash = null, builtKey = null, botTimer = null, overlayKey = null, restartArm = false;
 
 /* ---------- сохранение ---------- */
@@ -42,7 +42,7 @@ function drawStart() {
     ? `<button class="b contbtn" onclick="UI.resume()">▶ Продолжить партию (${sv.S.players[0].profName}, ход ${sv.S.players[0].turns})</button>` : '';
   $('diffSeg').innerHTML = Object.entries(D.DIFF).map(([k, v]) => `<button class="${k === diffSel ? 'on' : ''}" onclick="UI.setDiff('${k}')">${v.n}</button>`).join('');
   $('diffNote').textContent = D.DIFF[diffSel].note;
-  $('modeSeg').innerHTML = [['pick', 'Выбрать'], ['random', 'Случайно']].map(([k, n]) => `<button class="${k === profMode ? 'on' : ''}" onclick="UI.setMode('${k}')">${n}</button>`).join('');
+  $('modeSeg').innerHTML = [['random', 'Случайно'], ['pick', 'Выбрать']].map(([k, n]) => `<button class="${k === profMode ? 'on' : ''}" onclick="UI.setMode('${k}')">${n}</button>`).join('');
   const got = achGot(); $('achBtn').textContent = `Достижения ${D.ACH.filter(a => got[a.id]).length}/${D.ACH.length}`;
   if (profMode === 'random') {
     $('profList').innerHTML = `<button class="b" style="width:100%;margin:6px 0 4px;font-size:16px;padding:15px" onclick="UI.startRandom()">Бросить кубик профессии</button>`;
