@@ -100,6 +100,7 @@ function build(el, o) {
     <div class="tcells">${cells}</div>
     <div class="tcenter" style="left:${W / 2 - (rx - 52)}px;top:${H / 2 - (ry - 70)}px;width:${(rx - 52) * 2}px;height:${(ry - 70) * 2}px">
       <div class="lvlname">${lv.title}</div>
+      <div class="cyc" id="cyc"></div>
       <div class="dice" id="dice"></div>
       <div class="lastmsg" id="lastMsg"></div>
     </div>

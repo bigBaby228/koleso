@@ -28,11 +28,12 @@
       <div class="lbl">Профессия</div>
       <div class="seg" id="modeSeg"></div>
       <div id="profList"></div>
+      <button class="b" style="width:100%;margin-top:12px;background:#2f7d55" onclick="UI.startTutorial()">Обучение · 2 минуты</button>
       <div class="startbtns"><button class="b sec" onclick="UI.showRules()">Правила</button><button class="b sec" onclick="UI.showAch()" id="achBtn">Достижения</button></div>
       <details class="qh" style="margin-top:12px"><summary>Для теста</summary><div>
         <button class="testlink" onclick="UI.debugMid()">Сразу на средний круг</button>
         <button class="testlink" style="margin-top:4px" onclick="UI.debugFast()">Сразу в Большую игру</button></div></details>
-      <div style="text-align:center;font-size:11px;color:var(--hint);margin-top:10px;opacity:.7">Версия 0.7 · 21.11.2026</div>
+      <div style="text-align:center;font-size:11px;color:var(--hint);margin-top:10px;opacity:.7">Версия 0.8 · 21.11.2026</div>
     </div>
   </div>
 
@@ -72,6 +73,7 @@
   <div class="shade" id="shade"></div>
   <div class="sheet" id="sheet"></div>
   <div class="win hidden" id="win"></div>
+  <div class="coach hidden" id="coach"></div>
   <div class="toast" id="toast"></div>
 </div>
 

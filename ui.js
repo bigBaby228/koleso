@@ -15,8 +15,8 @@ let S = null, busy = false, view = 'board', diffSel = 'normal', profMode = 'pick
 let stageUI = null, seenLog = 0, seenNews = 0, tradeUI = null, qtyUI = null, anim = null, lastCash = null, builtKey = null, botTimer = null, overlayKey = null, restartArm = false;
 
 /* ---------- сохранение ---------- */
-function save() { try { localStorage.setItem(SAVE, JSON.stringify({ S, seenLog, seenNews })); } catch (e) { /* хранилище недоступно */ } }
-function load() { try { const x = JSON.parse(localStorage.getItem(SAVE)); return x && x.S && x.S.v === 3 ? x : null; } catch (e) { return null; } }
+function save() { if (tut) return; try { localStorage.setItem(SAVE, JSON.stringify({ S, seenLog, seenNews })); } catch (e) { /* хранилище недоступно */ } }
+function load() { try { const x = JSON.parse(localStorage.getItem(SAVE)); return x && x.S && x.S.v === 4 ? x : null; } catch (e) { return null; } }
 function clearSave() { try { localStorage.removeItem(SAVE); } catch (e) { /* ignore */ } }
 
 /* ---------- Telegram ---------- */
@@ -111,7 +111,7 @@ function debugFast() {
 
 /* ---------- действия ---------- */
 const nameOf = pid => pid === ME ? 'Ты' : S.players[pid].name;
-function A(type, extra) { dispatch(Object.assign({ type, pid: ME }, extra || {})); }
+function A(type, extra) { if (tut) return toast('Это обучение — кнопки только для примера'); dispatch(Object.assign({ type, pid: ME }, extra || {})); }
 function dispatch(a) {
   if (busy && !a._bot) { toast('Подожди, сейчас ход другого игрока'); return; }
   const r = E.act(S, a);
@@ -138,7 +138,7 @@ function dispatch(a) {
 }
 function kickBots() {
   clearTimeout(botTimer);
-  if (!S || S.phase === 'over' || stageUI) return;
+  if (!S || S.phase === 'over' || stageUI || tut) return;
   const a = E.botAction(S);
   if (!a) return;
   busy = true; render();
@@ -192,7 +192,7 @@ function render() {
   }
   if (lastCash !== null && lastCash !== me.cash && !anim) floatTxt(me.cash - lastCash);
   lastCash = me.cash;
-  renderTokens(); renderRace(); renderNewsbar();
+  renderTokens(); renderRace(); renderNewsbar(); renderCycle();
   if (view === 'ex') renderEx();
   if (view === 'report') renderReport();
   if (view === 'edu') renderEdu();
@@ -220,6 +220,60 @@ function render() {
 const shortMoney = n => { const a = Math.abs(n), sg = n < 0 ? '−' : ''; return a >= 1e6 ? `${sg}$${(a / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',')}M` : a >= 1e4 ? `${sg}$${Math.round(a / 1000)}k` : a >= 1000 ? `${sg}$${(a / 1000).toFixed(1).replace('.', ',')}k` : `${sg}$${Math.round(a)}`; };
 const ringOf = me => me.mode === 'fast' ? [D.FCELLS, D.FT] : me.mode === 'mid' ? [D.MCELLS, D.MT] : [D.CELLS, D.CT];
 let lastHTML = '';
+
+/* ---------- обучение ---------- */
+let tut = null;
+const legendHTML = (cells, T) => `<div class="tlegend">${[...new Set(cells)].map(t => `<span><i style="--cc:${T[t].c}">${KolesoTable.svgIcon(KolesoTable.CELL_ICON[t])}</i>${T[t].n}</span>`).join('')}</div>`;
+const TUT = [
+  { sel: '#tableWrap', t: 'Твой стол', d: 'Ты и два соперника за одним столом. Кто первым купит мечту в Большой игре — победил.' },
+  { sel: '.seat.s-bl', top: 1, t: 'Твоё место', d: 'Здесь твои деньги и полоска прогресса к цели круга. У соперников — то же самое.' },
+  { sel: '.tcells', t: 'Клетки', d: 'Ходишь по кругу. Нажми на клетку в игре — увидишь, что она делает.', legend: 'rat' },
+  { sel: '.hud', t: 'Цель круга', d: 'На колесе: пассивный доход должен покрыть расходы. Перейти дальше можно только без долгов.' },
+  { sel: '#cyc', t: 'Экономика', d: 'Рост → пик → кризис → восстановление. В кризис сделки дешёвые, но поток падает и банк строже.' },
+  { sel: '#rollBtn', t: 'Ход', d: 'Бросай кубик. Иногда перед броском бизнес просит принять решение.' },
+  { card: 'deal', t: 'Сделки и кредиты', d: 'Покупай за свои или в кредит. Короткий дешевле, но его надо вернуть через 8 ходов. Длинный дороже, зато без срока. Проверь, не съест ли платёж весь доход.' },
+  { card: 'auction', t: 'Торги', d: 'За крупные сделки торгуются соперники. Перебивай ставку или пасуй.' },
+  { card: 'dilemma', t: 'Решения по бизнесу', d: 'У каждого варианта свои последствия. Иногда это лотерея.' },
+  { card: 'gamble', t: 'Темки', d: 'Быстрые деньги или долг коллекторам. Видно, что выпадет на каждой грани.' },
+  { view: 'ex', sel: '#v-ex', t: 'Биржа', d: 'Акции двигаются на новостях. ХомякКоин — лотерея, держать его долго невыгодно.' },
+  { view: 'edu', sel: '#v-edu', t: 'Учёба', d: 'Навыки за деньги и ход: аналитика сделок, переговоры, менеджмент и другие.' },
+  { view: 'report', sel: '#v-report', t: 'Отчёт', d: 'Доходы, расходы, долги. Здесь гасишь кредиты и продаёшь бизнесы — за 80% цены.' },
+  { view: 'chat', sel: '#v-chat', t: 'Чат', d: 'Соперники отказываются от сделок — их можно забрать в свой ход.' },
+  { mode: 'mid', sel: '#tableWrap', t: 'Средний круг', d: 'Покерный клуб. Растишь бизнес до потока $100 000 в месяц. До 3 бизнесов ведёшь сам, дальше нужен управляющий.', legend: 'mid' },
+  { mode: 'fast', sel: '#tableWrap', t: 'Большая игра', d: 'VIP-стол. Выкупай компании, двигай рынок и купи мечту раньше всех. Осторожно: иски, рейдеры, санкции.', legend: 'fast' },
+  { t: 'Готово!', d: 'Начни с «Нормальной» сложности. Удачи!' },
+];
+function startTutorial() {
+  start('teacher'); clearTimeout(botTimer);
+  const me = S.players[ME];
+  me.assets.push(Object.assign({}, D.SBIZ[5], { flow: 270, id: ++S.uid, loan: 3000, loanRate: 0.035 }));
+  me.loans.push({ amt: 3000, rate: 0.035, kind: 'short', due: 8 });
+  tut = { i: 0, base: JSON.parse(JSON.stringify(S)) };
+  tutShow();
+}
+function tutShow() {
+  const st = TUT[tut.i];
+  document.querySelectorAll('.tut-hl').forEach(e => e.classList.remove('tut-hl'));
+  S = JSON.parse(JSON.stringify(tut.base));
+  const me = S.players[ME];
+  if (st.mode === 'mid') { me.mode = 'mid'; me.mstart = 3000; }
+  if (st.mode === 'fast') { me.mode = 'fast'; me.dream = 4; me.fstart = me.fflow = 1000000; me.dreamCost = 17000000; }
+  const deal = Object.assign({}, D.BIG[0], { down: 15000, price: 150000, flow: 1300 });
+  if (st.card === 'deal') { S.phase = 'card'; S.card = { kind: 'deal', deal: Object.assign({}, D.SBIZ[0], { flow: 260 }), tier: 'sbiz' }; }
+  if (st.card === 'auction') { S.phase = 'card'; S.card = { kind: 'deal', big: true, deal, auction: { price: 15000, leader: 1, bids: [{ pid: 1, max: 0 }], log: [[1, 15000]], done: false } }; }
+  if (st.card === 'dilemma') { S.phase = 'card'; S.card = { kind: 'dilemma', di: 0, aid: me.assets[0].id }; }
+  if (st.card === 'gamble') { S.phase = 'card'; S.card = { kind: 'gamble', g: D.GAMBLES[0], stake: 2000, scale: 1, tier: 'rat', result: null }; }
+  switchView(st.view || 'board');
+  const T = st.legend === 'mid' ? [D.MCELLS, D.MT] : st.legend === 'fast' ? [D.FCELLS, D.FT] : [D.CELLS, D.CT];
+  const box = $('coach');
+  box.innerHTML = `<div class="ct">${st.t}<span>${tut.i + 1}/${TUT.length}</span></div><div class="cd">${st.d}</div>${st.legend ? legendHTML(T[0], T[1]) : ''}
+    <div class="cb">${tut.i ? '<button class="b sec" onclick="UI.tutGo(-1)">Назад</button>' : '<button class="b sec" onclick="UI.tutEnd()">Пропустить</button>'}
+    <button class="b" onclick="${tut.i === TUT.length - 1 ? 'UI.tutEnd()' : 'UI.tutGo(1)'}">${tut.i === TUT.length - 1 ? 'Начать игру' : 'Далее'}</button></div>`;
+  box.classList.toggle('top', !!(st.card || st.top));
+  box.classList.remove('hidden');
+  setTimeout(() => { const el = st.sel && document.querySelector(st.sel); if (el) el.classList.add('tut-hl'); }, 50);
+}
+function tutEnd() { tut = null; $('coach').classList.add('hidden'); document.querySelectorAll('.tut-hl').forEach(e => e.classList.remove('tut-hl')); clearSave(); showStart(); }
 
 /* ---------- достижения ---------- */
 const ACH_KEY = 'koleso-ach-v1';
@@ -273,6 +327,19 @@ function renderRace() {
     active: act === q.id && S.phase !== 'over', out: q.bankrupt, badge: q.mode === 'fast' ? '★' : q.mode === 'mid' ? '◆' : '', cash: q.cash,
   })));
 }
+function cycleInfo() {
+  const c = S.cycle, ph = C.phase(S), alive = S.players.filter(q => !q.bankrupt).length || 1;
+  const exact = C.has(S.players[ME], 'trading');
+  const left = exact ? Math.max(1, Math.ceil(c.left / alive)) : Math.max(1, c.est - Math.floor((S.tick - c.start) / alive));
+  const next = D.CYCLE[(c.i + 1) % D.CYCLE.length];
+  return { ph, left, next, exact };
+}
+function renderCycle() {
+  const el = $('cyc'); if (!el) return;
+  const ci = cycleInfo();
+  el.className = 'cyc ph-' + ci.ph.id;
+  el.textContent = `${ci.ph.n} · ${ci.exact ? '' : '~'}${ci.left} ход.`;
+}
 function renderNewsbar() {
   const n = S.news[S.news.length - 1];
   $('newsbar').innerHTML = n ? `<span class="nt ${n.rum ? 'rum' : 'off'}">${n.rum ? '🗣 СЛУХ' : '📰'}</span><span>${n.t}</span>`
@@ -291,14 +358,25 @@ const dieBox = v => `<div class="dice" style="justify-content:center;margin:6px 
 const rowsHTML = r => `<div class="rows">${r.map(x => `<div class="ln"><span class="s">${x[0]}</span><span class="${x[2] || ''}">${x[1]}</span></div>`).join('')}</div>`;
 
 /* ---------- отчёт ---------- */
-function assetLine(a) {
-  if (!a.loan) return `<div class="ln"><span class="s">${a.e} ${a.n}${riskTag(a.risk)}</span><span class="g">+${money(a.flow)}</span></div>`;
-  const pay = Math.round(a.loan * a.loanRate), net = a.flow - pay;
-  return `<div class="ln"><span class="s">${a.e} ${a.n}${riskTag(a.risk)}${net < 0 ? '<span class="lossTag">убыточен из-за кредита</span>' : ''}<br>
-    <small>доход +${money(a.flow)} · банку −${money(pay)} (кредит ${money(a.loan)} под ${pct(a.loanRate)})</small></span>
-    <span class="${net >= 0 ? 'g' : 'r'}">${net >= 0 ? '+' : ''}${money(net)}</span></div>`;
+function assetLine(a, man) {
+  const me = S.players[ME], inc = C.assetIncome(S, me, a, man), managed = man.has(a.id);
+  const pay = a.loan ? Math.round(a.loan * a.loanRate) : 0, net = inc - pay;
+  const canSell = S.cur === ME && S.phase === 'roll' && !busy && me.mode !== 'fast';
+  const sub = [(D.SECTORS[C.secOf(a)] || {}).n, managed ? 'управляющий −25%' : '', a.loan ? `банку −${money(pay)}` : ''].filter(Boolean).join(' · ');
+  return `<div class="ln"><span class="s">${a.e} ${a.n}${riskTag(a.risk)}${net < 0 ? '<span class="lossTag">в минусе</span>' : ''}<br><small>${sub}</small></span>
+    <span style="text-align:right"><span class="${net >= 0 ? 'g' : 'r'}">${net >= 0 ? '+' : ''}${money(net)}</span>
+    ${canSell ? `<br><button class="sellmini" onclick="UI.A('sellBiz',{id:${a.id}})">продать ${money(C.salePrice(S, a))}</button>` : ''}</span></div>`;
 }
-const loanName = l => l.shady ? 'Коллекторы' : l.kind === 'cash' ? 'Потребкредит' : l.kind === 'edu' ? 'За учёбу' : 'Кредит';
+let repayAmt = null;
+function repayBox(me) {
+  const max = Math.floor(Math.min(me.cash, C.loanTotal(me)));
+  if (repayAmt == null || repayAmt > max) repayAmt = max;
+  const opt = [[0.25, '25%'], [0.5, '50%'], [1, 'Всё']].map(([k, n]) => `<button class="${repayAmt === Math.floor(max * k) ? 'on' : ''}" onclick="UI.setRepay(${Math.floor(max * k)})">${n}</button>`).join('');
+  return `<div class="repay"><div class="qty" style="margin:8px 0 6px">${opt}</div>
+    <div style="display:flex;gap:8px"><input type="number" inputmode="numeric" min="1" max="${max}" value="${repayAmt}" onchange="UI.setRepay(Math.max(0,Math.min(${max},Math.floor(+this.value||0))))">
+    <button class="b" style="padding:9px 14px;font-size:14px" onclick="UI.A('repay',{n:${repayAmt}})" ${repayAmt > 0 ? '' : 'disabled'}>Погасить</button></div></div>`;
+}
+const loanName = l => l.shady ? 'Коллекторы' : l.kind === 'cash' ? 'Потребкредит' : l.kind === 'edu' ? 'За учёбу' : l.kind === 'short' ? `Короткий (до хода ${l.due})` : 'Длинный';
 function renderReport() {
   const me = S.players[ME];
   if (me.mode === 'fast') return renderFastReport(me);
@@ -314,7 +392,8 @@ function renderReport() {
   </div>
   <div class="card"><h3>Доходы</h3>
     <div class="ln"><span>Зарплата</span><span>${money(me.salary)}</span></div>
-    ${inc.map(a => assetLine(a)).join('')}
+    ${(() => { const man = C.managedIds(me); return inc.map(a => assetLine(a, man)).join(''); })()}
+    ${inc.length ? `<div class="note">Бизнесов ${inc.filter(C.isBiz).length} из ${C.slots(me)} без управляющего · отраслей ${C.sectorsCount(me)}${C.sectorsCount(me) >= D.RULES.diversifySectors ? ' — риск ниже' : ''}</div>` : ''}
     ${st.filter(a => C.divOf(S, a)).map(a => `<div class="ln"><span class="s">${D.TICK[a.tk].e} Дивиденды ${a.tk} × ${a.shares}</span><span class="g">+${money(C.divOf(S, a))}</span></div>`).join('')}
     ${!pas ? '<div class="empty">Пассивного дохода пока нет</div>' : ''}
     <div class="ln tot"><span>Пассивный доход</span><span class="g">${money(pas)}</span></div>
@@ -333,13 +412,13 @@ function renderReport() {
     
   </div>
   <div class="card"><h3>Банк</h3>
-    <div class="ln"><span class="s">Кредит под бизнес</span><b class="y">${pct(C.rateFor(S, me))}/мес</b></div>
+    <div class="ln"><span class="s">Короткий · длинный</span><b class="y">${pct(C.rateFor(S, me, 'short'))} · ${pct(C.rateFor(S, me))}/мес</b></div>
     <div class="ln"><span class="s">Потребкредит</span><b class="r">${pct(C.rateFor(S, me, 'cash'))}/мес</b></div>
     <div class="ln"><span class="s">Долг · платёж</span><span>${money(C.loanTotal(me))} · ${money(C.loanPay(me))}/мес</span></div>
     <div class="loanbtns">
       <button class="sbtn" onclick="UI.A('loan',{n:1000})" ${C.canBorrow(S, me, 1000, 'cash') ? '' : 'disabled'}>Потребкредит $1 000</button>
-      <button class="sbtn" onclick="UI.A('repay',{n:Math.min(${Math.floor(me.cash)}, ${C.loanTotal(me)})})" ${C.loanTotal(me) && me.cash >= 1 ? '' : 'disabled'}>Погасить ${money(Math.min(me.cash, C.loanTotal(me)))}</button>
     </div>
+    ${C.loanTotal(me) ? repayBox(me) : ''}
     ${qh('Кредит под бизнес выдаётся при покупке сделки. Потребкредит — просто деньги на руки, он очень дорогой. Чем больше уже должен, тем выше ставка. Гасится сначала самый дорогой долг. На следующий круг можно перейти только без долгов.', 'Как работают кредиты')}
   </div>
   <button class="testlink" onclick="UI.restart(this)">↺ Бросить партию и начать заново</button>`;
@@ -399,7 +478,11 @@ function spark(h) {
 }
 function renderEx() {
   const me = S.players[ME];
-  $('ex').innerHTML = `
+  const ci = cycleInfo(), ph = ci.ph;
+  $('ex').innerHTML = `<div class="card"><div class="rate"><div><h3 style="margin:0">Экономика: ${ph.n}</h3>
+    <div class="note" style="margin-top:3px">Дальше — ${ci.next.n.toLowerCase()} через ${ci.exact ? '' : '~'}${ci.left} ход.${ci.exact ? '' : ' (точно — с «Биржевой торговлей»)'}</div></div>
+    <div class="cyc ph-${ph.id}" style="position:static">${ph.flowK >= 1 ? '+' : ''}${Math.round((ph.flowK - 1) * 100)}% поток</div></div>
+    ${qh('Рост: поток выше. Пик: бизнес продаётся дороже всего, новые сделки дороже. Кризис: поток падает, сделки дешёвые, ставки выше, банк строже. Восстановление: сделки со скидкой. Отрасли реагируют по-разному: еда слабее, IT и производство сильнее.', 'Как работает цикл')}</div>
   <div class="card"><div class="rate"><div><h3 style="margin:0">Ставка по новым кредитам</h3>
     <div class="note" style="margin-top:3px">Под бизнес. Меняется решениями ЦБ.</div></div>
     <div class="bigr y">${pct(C.rateFor(S, me))}<div class="note" style="margin:0;text-align:right">в месяц</div></div></div></div>
@@ -499,28 +582,46 @@ function cardHTML(c) {
   const btn = (txt, act, cls, dis) => `<button class="b ${cls || ''}" onclick="${act}" ${dis ? 'disabled' : ''}>${txt}</button>`;
   switch (c.kind) {
     case 'deal': {
-      const d = c.deal, can = me.cash >= d.down;
+      const d = c.deal, can = me.cash >= d.down, au = c.auction;
       const need = Math.ceil((d.down - me.cash) / 1000) * 1000, full = Math.ceil(d.down / 1000) * 1000;
-      const L = can ? full : need, okL = C.canBorrow(S, me, L), rate = C.rateFor(S, me);
-      const hint = C.has(me, 'analytics') ? analyticsBlock(d, L, rate, can)
-        : D.DIFF[S.diff].hints
-        ? `<div class="hint">В кредит: банку ${money(L * rate)}/мес → итог <b class="${d.flow - L * rate >= 0 ? 'g' : 'r'}">${d.flow - L * rate >= 0 ? '+' : ''}${money(d.flow - L * rate)}/мес</b></div>`
-        : qh(`Платёж по кредиту = сумма × ${pct(rate)} в месяц. Если он больше потока, бизнес в минусе. Расчёт делает навык «Бизнес-аналитика».`, 'Выгодно ли в кредит?');
-      return `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.tier === 'sbiz' ? '#5fc8e0' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? '◆ Средний бизнес' : c.tier === 'sbiz' ? '🏬 Малый бизнес' : c.big ? '🏢 Крупная сделка' : '🏠 Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
-      <div class="sh-e">${d.e}</div><div class="sh-t">${d.n}</div><div class="sh-d">${d.d}</div>
-      ${rowsHTML([['Стоимость', money(d.price)], ['Первый взнос', money(d.down)],
-        ...(d.price > d.down ? [['Ипотека объекта (уже в потоке)', money(d.price - d.down)]] : []),
-        ['Денежный поток', '+' + money(d.flow) + '/мес', 'g'],
+      const L = can ? full : need, rate = C.rateFor(S, me), rateS = C.rateFor(S, me, 'short');
+      const okL = C.canBorrow(S, me, L), okS = C.canBorrow(S, me, L, 'short');
+      const nBiz = me.assets.filter(C.isBiz).length, isB = d.cat !== 'flat' && d.cat !== 'house';
+      const head = `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.tier === 'sbiz' ? '#5fc8e0' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? 'Средний бизнес' : c.tier === 'sbiz' ? 'Малый бизнес' : c.big ? 'Крупная сделка' : 'Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
+      <div class="sh-e">${d.e}</div><div class="sh-t">${d.n}</div><div class="sh-d">${d.d}</div>`;
+      const rows = rowsHTML([['Взнос', money(d.down) + (au && au.done && au.price > (au.log[0] || [0, 0])[1] ? ' (торги)' : '')],
+        ['Поток', '+' + money(d.flow) + '/мес', 'g'],
+        ['Отрасль', (D.SECTORS[C.secOf(d)] || {}).n || '—'],
         ...(d.risk ? [['Риск прогореть', d.risk >= 0.35 ? 'высокий' : 'средний', d.risk >= 0.35 ? 'r' : 'y']] : []),
-        ...(d.nego ? [['🤝 Переговоры', 'взнос −10%', 'g']] : []),
-        ['Ставка банка для тебя', pct(rate) + ' в мес', 'y'], ['У тебя на руках', money(me.cash)]])}
-      ${hint}
+        ...(isB && nBiz >= C.slots(me) ? [['Управляющий', '−25% потока', 'r']] : []),
+        ...(d.nego ? [['Переговоры', 'взнос −10%', 'g']] : []),
+        ['На руках', money(me.cash)]]);
+      if (au && !au.done) {
+        const leader = au.leader == null ? null : au.leader === ME ? 'ты' : S.players[au.leader].name;
+        const next = au.leader == null ? au.price : Math.round(au.price * (1 + D.RULES.auctionStep) / 100) * 100;
+        const rivals = au.bids.map(b => S.players[b.pid].name).join(' и ');
+        return head + rows + `<div class="verdict"><div class="vt y">Торги</div>${rivals} тоже хотят эту сделку.<br>
+          Ставка: <b>${money(au.price)}</b>${leader ? ` · лидер: <b>${leader}</b>` : ''}</div>
+          <div class="btns">${btn(au.leader == null ? `Беру за ${money(next)}` : `Ставлю ${money(next)}`, "UI.A('bid')", 'warn')}${btn('Пас', "UI.A('pass')", 'sec')}</div>
+          ${qh('Шаг торгов +10% к взносу. Выиграешь — заплатишь свою ставку как взнос. Спасуешь — сделку заберёт соперник.', 'Как идут торги')}`;
+      }
+      const hint = C.has(me, 'analytics') ? analyticsBlock(d, L, rate, can)
+        : D.DIFF[S.diff].hints ? `<div class="hint">В кредит: банку ${money(L * rate)}/мес → итог <b class="${d.flow - L * rate >= 0 ? 'g' : 'r'}">${d.flow - L * rate >= 0 ? '+' : ''}${money(d.flow - L * rate)}/мес</b></div>` : '';
+      return head + rows + (au && au.done ? `<div class="hint g">Торги выиграны за ${money(d.down)}</div>` : '') + hint + `
       <div class="btns">
         ${can ? btn(`Купить за свои ${money(d.down)}`, "UI.A('buy',{loan:0})") : ''}
-        ${okL ? btn(`${can ? 'Купить в кредит' : 'Добавить кредит'} ${money(L)} под ${pct(rate)}`, `UI.A('buy',{loan:${L}})`, can ? 'sec' : 'warn')
-              : (!can ? btn(`Не хватает ${money(d.down - me.cash)}`, '', '', true) + `<div class="sh-d" style="margin:0">🚫 Банк не даст ${money(L)}: поток слишком маленький.</div>` : '')}
+        ${okS ? btn(`Короткий кредит ${money(L)} · ${pct(rateS)} · ${D.RULES.shortTerm} ходов`, `UI.A('buy',{loan:${L},lkind:'short'})`, can ? 'sec' : 'warn') : ''}
+        ${okL ? btn(`Длинный кредит ${money(L)} · ${pct(rate)}`, `UI.A('buy',{loan:${L},lkind:'deal'})`, 'sec') : ''}
+        ${!can && !okL && !okS ? btn(`Не хватает ${money(d.down - me.cash)}`, '', '', true) : ''}
         ${btn('Отказаться', "UI.A('pass')", 'sec')}
-      </div>`;
+      </div>
+      ${qh(`Короткий кредит дешевле, но через ${D.RULES.shortTerm} ходов его надо вернуть или перекредитоваться по новой ставке. В кризис банк может отказать. Длинный дороже, зато без срока.`, 'Какой кредит выбрать')}`;
+    }
+    case 'dilemma': {
+      const dl = D.DILEMMAS[c.di], as = me.assets.find(x => x.id === c.aid);
+      return `<div class="kind" style="color:#f5a623">Решение по бизнесу</div>
+      <div class="sh-e">${as ? as.e : ''}</div><div class="sh-t">${dl.t}</div><div class="sh-d">${as ? as.n + ' · поток ' + money(as.flow) : ''}</div>
+      <div class="btns">${btn(`${dl.a[0]}<br><small style="opacity:.8;font-weight:500">${dl.a[2]}</small>`, "UI.A('choose',{opt:'a'})")}${btn(`${dl.b[0]}<br><small style="opacity:.8;font-weight:500">${dl.b[2]}</small>`, "UI.A('choose',{opt:'b'})", 'sec')}</div>`;
     }
     case 'stock':
       return stockSheet(c.tk, c.price, 'buy', '💼 Брокер: пакет со скидкой 20%', 'UI.A(\'buyStock\',{qty:UI.qty()})') + btn('Отказаться', "UI.A('pass')", 'sec') + '</div>';
@@ -771,6 +872,8 @@ $('rollBtn').onclick = () => A('roll');
 window.UI = {
   A, toast, switchView, start, resume, debugFast, trade,
   setDiff: k => { diffSel = k; drawStart(); },
+  startTutorial, tutEnd, tutGo: d => { tut.i = Math.max(0, Math.min(TUT.length - 1, tut.i + d)); tutShow(); },
+  setRepay: n => { repayAmt = n; render(); },
   showAch, showRules, closeAch: () => { $('win').classList.add('hidden'); overlayKey = null; if (S) render(); else drawStart(); },
   setMode: k => { profMode = k; drawStart(); },
   startRandom,
