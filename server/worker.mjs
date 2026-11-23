@@ -26,7 +26,7 @@ export default {
       return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
     }
     if (url.pathname === '/version') return new Response(JSON.stringify({ server: SERVER_VERSION, debug: !!E.D.RULES.debug, dice: E.D.DICE.map(d => d.id) }), { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
-    return new Response(env.BOT_TOKEN ? 'Колесо: сервер работает' : 'Колесо: сервер работает, но BOT_TOKEN не задан', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    return new Response((env.BOT_TOKEN ? 'Колесо: сервер работает' : 'Колесо: сервер работает, но BOT_TOKEN не задан') + ' · версия ' + SERVER_VERSION, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
   },
 };
 
