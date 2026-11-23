@@ -9,6 +9,9 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import { RoomCore, checkTelegram } from './room.mjs';
+import E from '../engine.js';
+
+const SERVER_VERSION = '0.13.1';
 
 const CODE_RE = /^[A-Z0-9]{4,8}$/;
 
@@ -22,6 +25,7 @@ export default {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('websocket only', { status: 426 });
       return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
     }
+    if (url.pathname === '/version') return new Response(JSON.stringify({ server: SERVER_VERSION, debug: !!E.D.RULES.debug, dice: E.D.DICE.map(d => d.id) }), { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
     return new Response(env.BOT_TOKEN ? 'Колесо: сервер работает' : 'Колесо: сервер работает, но BOT_TOKEN не задан', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
   },
 };

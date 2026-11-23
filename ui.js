@@ -1205,6 +1205,18 @@ window.UI = {
 
 initTg();
 applyTheme(wallet().theme);
+// самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
+const APP_V = '0.13.1';
+try {
+  fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
+    if (!j || !j.v || j.v === APP_V) return;
+    const key = 'koleso-upd-' + j.v;
+    if (sessionStorage.getItem(key)) return; // уже пробовали — не зацикливаемся
+    sessionStorage.setItem(key, '1');
+    const q = new URLSearchParams(location.search); q.set('v', j.v);
+    location.replace(location.pathname + '?' + q.toString() + location.hash);
+  }).catch(() => {});
+} catch (e) { /* ignore */ }
 drawStart();
 { const sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || new URLSearchParams(location.search).get('room');
   if (sp && /^[A-Za-z0-9]{4,8}$/.test(sp)) netOpen(sp.toUpperCase()); }
