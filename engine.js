@@ -38,8 +38,13 @@ const phase = s => D.CYCLE[(s.cycle && s.cycle.i) || 0];
 const secOf = a => a.sec || (a.cat === 'flat' || a.cat === 'house' ? 'realty' : 'retail');
 const cycK = (s, sec) => 1 + (phase(s).flowK - 1) * ((D.SECTORS[sec] || { cyc: 1 }).cyc);
 const isBiz = a => a.t !== 'stock' && a.cat !== 'flat' && a.cat !== 'house';
+// первый круг: 5 мест, работа занимает 2; средний круг: свыше лимита нужен управляющий
 const slots = p => R.manageSlots + (has(p, 'management') ? R.managementBonus : 0) + (p.free ? R.freeSlots : 0);
-function managedIds(p) { const b = p.assets.filter(isBiz).sort((x, y) => y.flow - x.flow); return new Set(b.slice(slots(p)).map(a => a.id)); }
+const occupies = a => a.t !== 'stock';
+const usedSlots = p => p.assets.filter(occupies).length;
+const ratFull = p => p.mode === 'rat' && usedSlots(p) >= slots(p);
+function managedIds(p) {
+  if (p.mode === 'rat') return new Set(); const b = p.assets.filter(isBiz).sort((x, y) => y.flow - x.flow); return new Set(b.slice(slots(p)).map(a => a.id)); }
 const assetIncome = (s, p, a, man) => a.t === 'stock' ? divOf(s, a) : Math.round(a.flow * cycK(s, secOf(a)) * ((man || managedIds(p)).has(a.id) ? 1 - R.managerCut : 1));
 const passive = (s, p) => { const man = managedIds(p); return p.assets.reduce((x, a) => x + assetIncome(s, p, a, man), 0); };
 const sectorsCount = p => new Set(p.assets.filter(a => a.t !== 'stock').map(secOf)).size;
@@ -67,14 +72,15 @@ const skillCost = (s, p, sk) => scaleCost(s, p, D.SKILLS.find(x => x.id === sk).
 const dealScale = p => Math.max(0.45, p.exp.reduce((x, e) => x + e[1], 0) / R.dealScaleBase);
 const scaleDeal = (s, p, base) => {
   const k = dealScale(p) * phase(s).priceK, kf = dealScale(p), r = x => Math.max(100, r100(x));
-  return Object.assign({}, base, { price: r(base.price * k), down: nego(p, r(base.down * k)), nego: has(p, 'negotiation'),
-    flow: Math.max(10, r10(base.flow * kf * diff(s).flow * yieldK(s))) });
+  const sd = base.size ? R.sizeDown[base.size] : 1;
+  return Object.assign({}, base, { price: r(base.price * k * sd), down: nego(p, r(base.down * k * sd)), nego: has(p, 'negotiation'),
+    flow: Math.max(10, r10(base.flow * kf * diff(s).flow * yieldK(s) * (base.size ? R.sizeYield[base.size] * R.sizeDown[base.size] : 1))) });
 };
 const scaleDealF = (s, p, base) => fog(s, scaleDeal(s, p, base));
 // Доход сделки известен неточно: заявленный est и реальный flow
 const fog = (s, d) => Object.assign(d, { est: d.flow, flow: Math.max(10, r10(d.flow * (R.fog[0] + rnd(s) * (R.fog[1] - R.fog[0])))) });
 const seen = (p, d) => (has(p, 'analytics') || d.est == null ? d.flow : d.est); // что видит игрок
-const ltvOf = (s, p) => (phase(s).tight ? R.ltvCrisis : R.ltv) + (has(p, 'credit') ? R.ltvCredit : 0) - (p.free ? R.ltvFree : 0);
+const ltvOf = (s, p) => (phase(s).tight ? R.ltvCrisis : R.ltv) + (has(p, 'credit') ? R.ltvCredit : 0) - (p.free && p.mode === 'rat' ? R.ltvFree : 0);
 const maxDealLoan = (s, p, d) => Math.floor(d.down * ltvOf(s, p) / 100) * 100;
 const cashPrice = d => r100(d.down * R.cashDisc);
 const yieldK = s => R.yieldSpread[0] + rnd(s) * (R.yieldSpread[1] - R.yieldSpread[0]);
@@ -196,12 +202,14 @@ function handle(s, a, ev) {
       note(p, { k: 'quit', v: p.jobSalary });
       (p.stats = p.stats || {}).quit = 1;
       say(s, pid, `Уволился(ась) с работы! Теперь только бизнес 🕊`);
-      toast(ev, pid, `🕊 Ты свободен. Зарплаты нет, зато на сделках два варианта на выбор и +${R.freeSlots} бизнеса без управляющего. Банк даёт на ${Math.round(R.ltvFree * 100)}% меньше.`);
+      toast(ev, pid, `🕊 Ты свободен. Зарплаты нет, зато +${R.freeSlots} места под бизнес и на сделках два варианта на выбор. Банк даёт на ${Math.round(R.ltvFree * 100)}% меньше.`);
       return;
     }
     case 'rehire': {
       need(s.phase === 'roll' && myTurn, 'Устроиться можно в свой ход до броска');
       need(p.free, 'Ты и так работаешь');
+      need(p.mode === 'rat', 'Со среднего круга на работу не возвращаются');
+      need(usedSlots(p) <= slots(p) - R.freeSlots, `С работой можно держать ${slots(p) - R.freeSlots} объекта. Сначала продай лишнее`);
       p.salary = r10(p.jobSalary * R.rehireK); p.free = false; p.rehiredAt = p.turns;
       say(s, pid, `Вернулся(ась) на работу. Зарплата ${money(p.salary)}`);
       toast(ev, pid, `💼 Снова на работе: зарплата ${money(p.salary)} (−${Math.round((1 - R.rehireK) * 100)}% за потерю стажа)`);
@@ -495,7 +503,7 @@ function resolveMid(s, p, ev) {
         return fog(s, Object.assign({}, b, { t: 'biz', cat: 'mbiz', price: r1000(down * 2.5), down: nego(p, down), nego: has(p, 'negotiation'), flow: Math.max(10, r100(b.flowF * m * midYield(p) * diff(s).flow * yieldK(s))) })); };
       const deal = mk(b);
       s.card = { kind: 'deal', deal, big: false, tier: 'mid' };
-      if (p.free) s.card.alt = mk(pick(s, D.MBIZ));
+
       setupAuction(s, p, s.card);
       break;
     }
@@ -675,6 +683,14 @@ function doBuy(s, p, a, ev) {
   if (c.kind === 'deal') {
     need(!c.auction || c.auction.done, 'Сначала торги');
     const d = c.deal, L = Math.max(0, Math.floor(+a.loan || 0)), lk = a.lkind === 'short' ? 'short' : 'deal';
+    if (a.sell != null) {
+      // обмен: продаём свой объект и сразу покупаем новый
+      const old = p.assets.find(x => x.id === a.sell && occupies(x)); need(old, 'Нет такого бизнеса');
+      const v = salePrice(s, old); p.cash += v; p.assets = p.assets.filter(x => x !== old);
+      note(p, { k: 'sell', n: old.n, e: old.e, v, down: old.down, flow: old.flow });
+      say(s, p.id, `Продал(а) ${old.n} за ${money(v)}`);
+    }
+    need(!ratFull(p), `Все ${slots(p)} места заняты. Продай что-то, чтобы купить${p.free ? '' : ', или уволься — освободится ещё ' + R.freeSlots}`);
     need(L % 100 === 0, 'Кредит выдаётся по $100');
     need(L <= maxDealLoan(s, p, d), `Банк даёт не больше ${Math.round(ltvOf(s, p) * 100)}% взноса`);
     if (L) need(canBorrow(s, p, L, lk), 'Банк отказал: поток слишком маленький');
@@ -863,6 +879,7 @@ function endTurn(s, p, ev) {
     }
     const ratGoal = p.mode === 'rat' && passive(s, p) >= expenses(s, p), midGoal = p.mode === 'mid' && cashflow(s, p) >= R.fastFlow;
     if ((ratGoal || midGoal) && !debtFree(p)) toast(ev, p.id, `🔒 Цель есть, но сначала закрой долги: ${money(loanTotal(p))}`);
+    else if (ratGoal && !p.free) toast(ev, p.id, '🔒 Доход покрывает расходы. Уволься с работы (Отчёт → Работа), чтобы перейти на средний круг');
     else if (ratGoal) enterMid(s, p, ev);
     else if (midGoal) {
       s.phase = 'exit'; s.exitPid = p.id;
@@ -1040,8 +1057,9 @@ function aiDeal(s, p, d) {
   if (p.cash - cashPrice(d) >= reserve) return { loan: 0 };
   const L = Math.ceil((d.down - Math.max(0, p.cash - reserve)) / 100) * 100;
   if (L > maxDealLoan(s, p, d)) return p.cash >= cashPrice(d) && eff > 0 && !nearGoal ? { loan: 0 } : null;
-  const cap = Math.max(1000, cashflow(s, p)) * (p.mode === 'mid' ? 3 : 4); // боты не берут кредит, который не отдать за пару зарплат
-  if (L > 0 && !nearGoal && L <= cap && canBorrow(s, p, L) && eff - L * rateFor(s, p, 'deal') > eff * 0.3 && p.cash + L >= d.down) return { loan: L };
+  // на среднем круге зарплаты нет — боты берут меньше и только с большим запасом по платежу
+  const cap = Math.max(1000, cashflow(s, p)) * (p.mode === 'mid' ? 1.5 : 4), margin = p.mode === 'mid' ? 0.55 : 0.3;
+  if (L > 0 && !nearGoal && L <= cap && canBorrow(s, p, L) && eff - L * rateFor(s, p, 'deal') > eff * margin && p.cash + L >= d.down) return { loan: L };
   if (p.cash >= cashPrice(d) && eff > 0) return { loan: 0 };
   return null;
 }
@@ -1061,6 +1079,21 @@ function afkAction(s) {
   if (s.card && s.card.result) return { type: 'ok', pid };
   return { type: 'pass', pid };
 }
+// бот при полных местах: меняет самый слабый объект, если новая сделка заметно лучше и по карману
+function botSwap(s, p, d) {
+  const own = p.assets.filter(occupies);
+  if (!own.length) return null;
+  const weak = own.slice().sort((a, b) => a.flow - b.flow)[0];
+  const gain = seen(p, d) * (1 - (d.risk || 0) * 0.8) - weak.flow;
+  if (gain < Math.max(50, weak.flow * 0.3)) return null;
+  const v = salePrice(s, weak), cash = p.cash + v;
+  if (cash - cashPrice(d) >= scaleCost(s, p, R.botReserve) * 0.5) return { sell: weak.id, loan: 0 };
+  const L = Math.ceil((d.down - Math.max(0, cash - scaleCost(s, p, R.botReserve) * 0.5)) / 100) * 100;
+  const p2 = Object.assign({}, p, { assets: p.assets.filter(x => x !== weak) }); // банк смотрит на поток уже без проданного
+  if (L <= 0 || L > maxDealLoan(s, p, d) || cash < d.down - L || !canBorrow(s, p2, L)) return null;
+  const pay = L * rateFor(s, p);
+  return gain - pay > weak.flow * 0.15 ? { sell: weak.id, loan: L } : null;
+}
 function botMove(s, pid, p) {
   if (s.phase === 'exit') return { type: 'dream', pid, i: [1, 0, 2][pid % 3] };
   if (s.phase === 'roll') {
@@ -1069,15 +1102,27 @@ function botMove(s, pid, p) {
       const shady = p.loans.some(l => l.shady || l.kind === 'cash'), spare = p.cash - scaleCost(s, p, R.botReserve);
       if ((goal || shady) && spare >= 1000) return { type: 'repay', pid, n: Math.min(Math.floor(spare / 1000) * 1000, Math.ceil(loanTotal(p) / 1000) * 1000) };
     }
+    // увольнение: цель круга требует уйти с работы; раньше — если все места заняты и запас есть
+    if (p.mode === 'rat' && !p.free && p.salary > 0) {
+      const pas = passive(s, p), ex = expenses(s, p);
+      const ready = pas >= ex * 1.25 && debtFree(p) && p.cash >= ex * 2;
+      const early = ratFull(p) && pas >= ex * 1.1 && debtFree(p) && p.cash >= (ex - pas) * 12 + scaleCost(s, p, R.botReserve);
+      if (ready || early) return { type: 'quit', pid };
+    }
     if (p.mode !== 'fast' && !p.noStudy) for (const sk of ['negotiation', 'risk', 'credit']) if (!has(p, sk) && p.cash > skillCost(s, p, sk) * 4) return { type: 'study', pid, skill: sk };
-    if (p.mode !== 'fast') for (const o of s.offers) if (o.from !== pid && (o.mode || 'rat') === p.mode && aiDeal(s, p, o.deal)) return { type: 'takeOffer', pid, id: o.id };
+    if (p.mode !== 'fast') for (const o of s.offers) if (o.from !== pid && (o.mode || 'rat') === p.mode && (!ratFull(p) || botSwap(s, p, o.deal)) && aiDeal(s, p, o.deal)) return { type: 'takeOffer', pid, id: o.id };
     return { type: 'roll', pid };
   }
   const c = s.card;
   switch (c.kind) {
     case 'deal': {
-      const ch = aiDeal(s, p, c.deal);
       const ph = phase(s).id, lk = (ph === 'growth' || ph === 'recovery') && s.cycle.left > s.players.length * 4 ? 'short' : 'deal';
+      if (ratFull(p)) {
+        const sw = botSwap(s, p, c.deal);
+        if (!sw) return { type: 'pass', pid };
+        return Object.assign({ type: 'buy', pid, lkind: lk, sell: sw.sell }, sw.loan ? { loan: sw.loan } : { loan: 0 });
+      }
+      const ch = aiDeal(s, p, c.deal);
       return ch ? { type: 'buy', pid, loan: ch.loan, lkind: lk } : { type: 'pass', pid };
     }
     case 'stock': {
@@ -1115,7 +1160,7 @@ function botMove(s, pid, p) {
 
 const KolesoEngine = {
   newGame, act, botAction, afkAction, actorId, D,
-  calc: { slots, dreamPrice, seen, ltvOf, maxDealLoan, cashPrice, passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
+  calc: { usedSlots, ratFull, occupies, slots, dreamPrice, seen, ltvOf, maxDealLoan, cashPrice, passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
           midF, midProgress, cap, has, rateFor, skillCost, debtFree, loadPremium,
           phase, secOf, cycK, assetIncome, managedIds, slots, sectorsCount, salePrice, isBiz, takeoverCost, takeoverFlow, influenceCost },
   fmt: { money, pct, fmtP },

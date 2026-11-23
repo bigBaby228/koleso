@@ -161,7 +161,7 @@ function start(prof) {
 function showRules() {
   const w = $('win'); w.className = 'win';
   w.innerHTML = `<h2 style="margin-top:4px">Правила</h2><div class="rules">
-    <p><b>1. Колесо.</b> Покупай активы, пока пассивный доход не покроет расходы.</p>
+    <p><b>1. Колесо.</b> Покупай бизнес, пока пассивный доход не покроет расходы. Мест 5, работа занимает 2: с работой держишь 3 объекта. Меняй мелкое на крупное. Чтобы перейти дальше — закрой долги и уволься.</p>
     <p><b>2. Средний круг.</b> Расти бизнесом до потока $100 000 в месяц.</p>
     <p><b>3. Большая игра.</b> Купи мечту или нарасти поток на $80 000 раньше соперников. Цены одни для всех.</p>
     <p><b>Кредит.</b> Банк даёт до 70% взноса, остальное — свои. За свои целиком скидка 10%. Доход в карточке — обещание продавца. Длинный кредит дорожает в кризис.</p>
@@ -280,13 +280,14 @@ function render() {
     $('hPct').textContent = fr + '%'; $('hBar').style.width = fr + '%';
     const goal = mid ? f >= D.RULES.fastFlow : C.passive(S, me) >= C.expenses(S, me);
     $('hAdvice').textContent = advice(me);
+    $('hSlots').innerHTML = me.mode === 'rat' ? slotsHTML(me) : '';
     $('hGoalSub').innerHTML = C.loanTotal(me) ? (goal ? `<span class="gate">🔒 Закрой долги ${money(C.loanTotal(me))}, чтобы перейти</span>` : `Долг ${money(C.loanTotal(me))} · −${money(C.loanPay(me))}/мес`) : '';
   } else {
     const dr = D.DREAMS[me.dream], fp = C.fProgress(S, me);
     $('hFlow').textContent = '+' + hm(me.fflow); $('hFlow').className = 'v y'; $('hFlowL').textContent = 'за выплату';
     $('hGoalTxt').innerHTML = `${dr.n}: ${shortMoney(me.cash)} из ${shortMoney(me.dreamCost)}`;
     $('hPct').textContent = fp + '%'; $('hBar').style.width = fp + '%';
-    $('hGoalSub').textContent = `или поток ${shortMoney(C.fTarget(me))}`; $('hAdvice').textContent = '';
+    $('hGoalSub').textContent = `или поток ${shortMoney(C.fTarget(me))}`; $('hAdvice').textContent = ''; $('hSlots').innerHTML = '';
   }
   if (lastCash !== null && lastCash !== me.cash && !anim) floatTxt(me.cash - lastCash);
   lastCash = me.cash;
@@ -429,7 +430,7 @@ const TUT = [
   { sel: '#tableWrap', t: 'Твой стол', d: 'Ты и два соперника за одним столом. Кто первым купит мечту в Большой игре — победил.' },
   { sel: '.seat.s-bl', top: 1, t: 'Твоё место', d: 'Здесь твои деньги и полоска прогресса к цели круга. У соперников — то же самое.' },
   { sel: '.tcells', t: 'Клетки', d: 'Ходишь по кругу. Нажми на клетку в игре — увидишь, что она делает.', legend: 'rat' },
-  { sel: '.hud', t: 'Цель круга', d: 'На колесе: пассивный доход должен покрыть расходы. Перейти дальше можно только без долгов.' },
+  { sel: '.hud', t: 'Цель круга', d: 'Пассивный доход должен покрыть расходы. Мест под бизнес 5, работа занимает 2. Чтобы перейти дальше, закрой долги и уволься.' },
   { sel: '#cyc', t: 'Экономика', d: 'Рост → пик → кризис → восстановление. В кризис сделки дешёвые, но поток падает и банк строже.' },
   { sel: '#dice', t: 'Ход', d: 'Нажми на кубик в центре стола, чтобы бросить. Скин кубика видят все за столом. Иногда перед броском бизнес просит принять решение.' },
   { card: 'deal', t: 'Сделки и кредиты', d: 'Банк даёт до 70% взноса, остальное — свои. За свои целиком скидка 10%. Доход в карточке — обещание продавца, реальный может быть ниже. Длинный кредит без срока, но в кризис ставка растёт.' },
@@ -570,7 +571,7 @@ function assetLine(a, man) {
   const sub = [(D.SECTORS[C.secOf(a)] || {}).n, managed ? 'управляющий −25%' : '', a.loan ? `банку −${money(pay)}` : ''].filter(Boolean).join(' · ');
   return `<div class="ln"><span class="s">${a.e} ${a.n}${riskTag(a.risk)}${net < 0 ? '<span class="lossTag">в минусе</span>' : ''}<br><small>${sub}</small></span>
     <span style="text-align:right"><span class="${net >= 0 ? 'g' : 'r'}">${net >= 0 ? '+' : ''}${money(net)}</span>
-    ${canSell ? `<br><button class="sellmini" onclick="UI.A('sellBiz',{id:${a.id}})">продать ${money(C.salePrice(S, a))}</button>` : ''}</span></div>`;
+    ${canSell ? `<br><button class="sellmini" onclick="UI.sellAsk(this,${a.id})">продать ${money(C.salePrice(S, a))}</button>` : ''}</span></div>`;
 }
 let repayAmt = null;
 function repayBox(me) {
@@ -633,12 +634,12 @@ function workCard(me) {
   if (me.mode === 'fast') return '';
   const myRoll = S.cur === ME && S.phase === 'roll' && !busy, cd = me.rehiredAt != null ? D.RULES.rehireCooldown - (me.turns - me.rehiredAt) : 0;
   if (me.free) return `<div class="card"><h3>Работа</h3>
-    <div class="note" style="margin:0 0 8px">Ты свободен: зарплаты нет, банк даёт на ${Math.round(D.RULES.ltvFree * 100)}% меньше. Зато на сделках два варианта на выбор, +${D.RULES.freeSlots} бизнеса без управляющего, подработка ×${String(D.RULES.freeGig).replace('.', ',')}, сокращение не страшно.</div>
-    <button class="sbtn" style="width:100%" onclick="UI.A('rehire')" ${myRoll ? '' : 'disabled'}>Вернуться на работу · ${money(Math.round(me.jobSalary * D.RULES.rehireK / 10) * 10)}/мес</button></div>`;
+    <div class="note" style="margin:0 0 8px">Ты свободен: зарплаты нет, банк даёт на ${Math.round(D.RULES.ltvFree * 100)}% меньше. Зато +${D.RULES.freeSlots} места под бизнес, на сделках два варианта на выбор, подработка ×${String(D.RULES.freeGig).replace('.', ',')}, сокращение не страшно.</div>
+    ${me.mode === 'rat' ? (C.usedSlots(me) > C.slots(me) - D.RULES.freeSlots ? `<div class="note">Вернуться на работу можно, если объектов не больше ${C.slots(me) - D.RULES.freeSlots}: работа займёт 2 места.</div>` : `<button class="sbtn" style="width:100%" onclick="UI.A('rehire')" ${myRoll ? '' : 'disabled'}>Вернуться на работу · ${money(Math.round(me.jobSalary * D.RULES.rehireK / 10) * 10)}/мес</button>`) : ''}</div>`;
   return `<div class="card"><h3>Работа</h3>
     <div class="ln"><span class="s">${me.profName}</span><span>${money(me.salary)}/мес</span></div>
     <button class="sbtn" style="width:100%;margin-top:6px" onclick="UI.quitJob(this)" ${myRoll && cd <= 0 ? '' : 'disabled'}>${cd > 0 ? `Уволиться можно через ${cd} ход.` : 'Уволиться'}</button>
-    ${qh(`Без зарплаты поток упадёт на ${money(me.salary)}, а банк даст на ${Math.round(D.RULES.ltvFree * 100)}% меньше. Взамен: на каждой сделке можно посмотреть второй вариант, +${D.RULES.freeSlots} бизнеса без управляющего, подработка в ${String(D.RULES.freeGig).replace('.', ',')} раза больше, сокращение не грозит. Вернуться можно с зарплатой −${Math.round((1 - D.RULES.rehireK) * 100)}%.`, 'Что даёт увольнение')}</div>`;
+    ${qh(`Без зарплаты поток упадёт на ${money(me.salary)}, а банк даст на ${Math.round(D.RULES.ltvFree * 100)}% меньше. Взамен: +${D.RULES.freeSlots} места под бизнес (работа их больше не занимает), на каждой сделке можно посмотреть второй вариант, подработка в ${String(D.RULES.freeGig).replace('.', ',')} раза больше, сокращение не грозит. Вернуться можно с зарплатой −${Math.round((1 - D.RULES.rehireK) * 100)}%.`, 'Что даёт увольнение')}</div>`;
 }
 function dbgBox() {
   if (!D.RULES.debug) return '';
@@ -801,6 +802,7 @@ function openSheet(html) {
 function closeSheet() { const sh = $('sheet'); sh.classList.remove('on'); $('shade').classList.remove('on'); sh.dataset.h = ''; }
 
 // оценка сделки для новичка: звёзды, окупаемость и вклад в цель круга
+let swapSel = null;
 function dealGrade(me, d, fl, rate, ana) {
   const ratio = fl / Math.max(1, d.down) / rate;
   let n = ratio >= 2.2 ? 3 : ratio >= 1.3 ? 2 : 1;
@@ -810,6 +812,14 @@ function dealGrade(me, d, fl, rate, ana) {
   const share = Math.max(1, Math.round(fl / Math.max(1, goal) * 100));
   const lbl = ['', 'Слабая', 'Нормальная', 'Отличная'][n];
   return `<div class="grade g${n}"><span class="stars">${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span> ${lbl}${ana || d.est == null ? '' : ' (по словам продавца)'} · окупится за ${pb} мес · <b>+${share}%</b> ${me.mode === 'mid' ? 'к Большой игре' : 'к свободе'}</div>`;
+}
+// места под бизнес на первом круге: занятые, свободные и занятые работой
+function slotsHTML(me) {
+  const own = me.assets.filter(C.occupies), n = C.slots(me), job = me.free ? 0 : D.RULES.freeSlots;
+  const cells = [];
+  for (let i = 0; i < n; i++) cells.push(own[i] ? `<i class="sl on" title="${own[i].n}">${own[i].e}</i>` : '<i class="sl"></i>');
+  for (let i = 0; i < job; i++) cells.push('<i class="sl job">работа</i>');
+  return `<span class="sll">Места</span>${cells.join('')}`;
 }
 // что сейчас важно: одна строка в шапке
 function advice(me) {
@@ -822,7 +832,9 @@ function advice(me) {
   if (shady) return `Долг коллекторам под ${pct(shady.rate)} в месяц. Гаси его первым (Отчёт → Банк).`;
   if (cash > 0 && me.cash > 2000) return `Потребкредит съедает ${money(cash)}/мес. Погаси его, деньги есть.`;
   if (me.mode === 'rat') {
-    if (pas >= ex && debt) return `Расходы покрыты! Закрой долги ${money(debt)}, и ты на среднем круге.`;
+    if (pas >= ex && debt) return `Расходы покрыты! Закрой долги ${money(debt)}${me.free ? '' : ' и уволься'}, и ты на среднем круге.`;
+    if (pas >= ex && !me.free) return `Расходы покрыты! Уволься (Отчёт → Работа), и ты на среднем круге. Запас по доходу ${Math.round((pas / ex - 1) * 100)}%: в кризис доход падает.`;
+    if (C.ratFull(me)) return `Все места заняты. Меняй самый слабый бизнес на сделку получше${me.free ? '' : ' или уволься: освободится ещё 2 места'}.`;
     const need = ex - pas;
     if (me.cash < 1500) return `Не хватает ${money(need)} пассивного дохода. Денег мало: копи до зарплаты, на сделку нужна своя доля 30%.`;
     return `Не хватает ${money(need)} пассивного дохода в месяц. Покупай бизнесы на клетках сделок, смотри на звёзды в карточке.`;
@@ -863,15 +875,21 @@ function cardHTML(c) {
   const btn = (txt, act, cls, dis) => `<button class="b ${cls || ''}" onclick="${act}" ${dis ? 'disabled' : ''}>${txt}</button>`;
   switch (c.kind) {
     case 'deal': {
-      const d = c.deal, au = c.auction, cp = C.cashPrice(d), can = me.cash >= cp, ana = C.has(me, 'analytics');
-      const maxL = C.maxDealLoan(S, me, d), need = Math.max(100, Math.ceil((d.down - me.cash) / 100) * 100);
+      const d = c.deal, au = c.auction, cp = C.cashPrice(d), ana = C.has(me, 'analytics');
+      // все места заняты: сначала выбрать, что продать (продажа и покупка — одним действием)
+      const full = C.ratFull(me), key = d.n + ':' + d.down + ':' + S.tick;
+      if (!swapSel || swapSel.key !== key || !me.assets.some(a => a.id === swapSel.id)) swapSel = null;
+      const selA = full && swapSel ? me.assets.find(a => a.id === swapSel.id) : null, selV = selA ? C.salePrice(S, selA) : 0;
+      const cashE = me.cash + selV, sellArg = selA ? `,sell:${selA.id}` : '';
+      const can = cashE >= cp;
+      const maxL = C.maxDealLoan(S, me, d), need = Math.max(100, Math.ceil((d.down - cashE) / 100) * 100);
       // кредит: если своих хватает — предлагаем максимум банка (сохранить наличные), иначе — сколько не хватает
-      const L = Math.min(maxL, can ? maxL : need), own = d.down - L, ownOk = me.cash >= own && L > 0;
+      const L = Math.min(maxL, can ? maxL : need), own = d.down - L, ownOk = cashE >= own && L > 0;
       const rate = C.rateFor(S, me), rateS = C.rateFor(S, me, 'short');
       const okL = ownOk && C.canBorrow(S, me, L), okS = ownOk && C.canBorrow(S, me, L, 'short');
       const fl = C.seen(me, d), ltv = Math.round(C.ltvOf(S, me) * 100);
       const nBiz = me.assets.filter(C.isBiz).length, isB = d.cat !== 'flat' && d.cat !== 'house';
-      const head = `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.tier === 'sbiz' ? '#5fc8e0' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? 'Средний бизнес' : c.tier === 'sbiz' ? 'Малый бизнес' : c.big ? 'Крупная сделка' : 'Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
+      const head = `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.tier === 'sbiz' ? '#5fc8e0' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? 'Средний бизнес' : d.size ? D.RULES.sizeName[d.size] : c.tier === 'sbiz' ? 'Малый бизнес' : c.big ? 'Крупная сделка' : 'Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
       <div class="sh-e">${d.e}</div><div class="sh-t">${d.n}</div><div class="sh-d">${d.d}</div>${dealGrade(me, d, fl, rate, ana)}`;
       const rows = rowsHTML([['Взнос', money(d.down) + (au && au.done && au.price > (au.log[0] || [0, 0])[1] ? ' (торги)' : '')],
         ana || d.est == null ? ['Поток', '+' + money(d.flow) + '/мес', 'g'] : ['Поток (обещают)', `≈ +${money(d.est)}/мес`, 'g'],
@@ -879,7 +897,8 @@ function cardHTML(c) {
         ...(d.risk ? [['Риск прогореть', d.risk >= 0.35 ? 'высокий' : 'средний', d.risk >= 0.35 ? 'r' : 'y']] : []),
         ...(isB && nBiz >= C.slots(me) ? [['Управляющий', '−25% потока', 'r']] : []),
         ...(d.nego ? [['Переговоры', `взнос −${Math.round((1 - D.RULES.negoDiscount) * 100)}%`, 'g']] : []),
-        ['На руках', money(me.cash)],
+        ['На руках', money(me.cash) + (selV ? ` + ${money(selV)} от продажи` : '')],
+        ...(me.mode === 'rat' ? [['Места', `${C.usedSlots(me)} из ${C.slots(me)}${me.free ? '' : ' (+2 после увольнения)'}`, full ? 'r' : '']] : []),
         ...(L > 0 ? [['В кредит', `банк ${money(L)} + свои ${money(own)}`, ownOk ? '' : 'r']] : [])]);
       if (au && !au.done) {
         const leader = au.leader == null ? null : au.leader === ME ? 'ты' : S.players[au.leader].name;
@@ -895,10 +914,12 @@ function cardHTML(c) {
         : (D.DIFF[S.diff].hints && L ? `<div class="hint">В кредит: банку ${money(L * rate)}/мес → при обещанном доходе итог <b class="${fl - L * rate >= 0 ? 'g' : 'r'}">${fl - L * rate >= 0 ? '+' : ''}${money(fl - L * rate)}/мес</b></div>` : '') + fog;
       return head + rows + (au && au.done ? `<div class="hint g">Торги выиграны за ${money(d.down)}</div>` : '') + hint + `
       <div class="btns">
-        ${can ? btn(`Купить за свои ${money(cp)} · скидка ${Math.round((1 - D.RULES.cashDisc) * 100)}%`, "UI.A('buy',{loan:0})") : ''}
-        ${okS ? btn(`Короткий ${money(L)} · ${pct(rateS)} · ${D.RULES.shortTerm} ходов`, `UI.A('buy',{loan:${L},lkind:'short'})`, can ? 'sec' : 'warn') : ''}
-        ${okL ? btn(`Длинный ${money(L)} · от ${pct(rate)}`, `UI.A('buy',{loan:${L},lkind:'deal'})`, 'sec') : ''}
-        ${!can && !okL && !okS ? btn(L > 0 && me.cash < own ? `Банк даёт ${money(L)} (${ltv}%) · своих нужно ${money(own)}` : `Не хватает ${money(cp - me.cash)}`, '', '', true) : ''}
+        ${full && !selA ? `<div class="swaphd">Все места заняты. Что продать, чтобы купить?</div>${me.assets.filter(C.occupies).sort((a, b) => a.flow - b.flow).map(a => btn(`Продать ${a.e} ${a.n} · +${money(C.salePrice(S, a))} · теряешь ${money(C.assetIncome(S, me, a))}/мес`, `UI.swapPick(${a.id})`, 'sec')).join('')}` : `
+        ${selA ? `<div class="swaphd">Продаёшь ${selA.e} ${selA.n} за ${money(selV)} · <a onclick="UI.swapPick(null)">другой</a></div>` : ''}
+        ${can ? btn(`${selA ? 'Продать и купить' : 'Купить'} за свои ${money(cp)} · скидка ${Math.round((1 - D.RULES.cashDisc) * 100)}%`, `UI.A('buy',{loan:0${sellArg}})`) : ''}
+        ${okS ? btn(`Короткий ${money(L)} · ${pct(rateS)} · ${D.RULES.shortTerm} ходов`, `UI.A('buy',{loan:${L},lkind:'short'${sellArg}})`, can ? 'sec' : 'warn') : ''}
+        ${okL ? btn(`Длинный ${money(L)} · от ${pct(rate)}`, `UI.A('buy',{loan:${L},lkind:'deal'${sellArg}})`, 'sec') : ''}
+        ${!can && !okL && !okS ? btn(L > 0 && cashE < own ? `Банк даёт ${money(L)} (${ltv}%) · своих нужно ${money(own)}` : `Не хватает ${money(cp - cashE)}`, '', '', true) : ''}`}
         ${c.alt && (!au || !au.log.length) ? btn(`Другой вариант: ${c.alt.e || ''} ${c.alt.n}`, "UI.A('swap')", 'sec') : ''}
         ${btn('Отказаться', "UI.A('pass')", 'sec')}
       </div>
@@ -1178,6 +1199,8 @@ window.UI = {
   setRepay: n => { repayAmt = n; render(); },
   showAch, showRules, closeAch: () => { $('win').classList.add('hidden'); overlayKey = null; if (S) render(); else drawStart(); },
   setMode: k => { profMode = k; drawStart(); },
+  swapPick: id => { const c = S.card; swapSel = id == null ? null : { key: c.deal.n + ':' + c.deal.down + ':' + S.tick, id }; renderSheet(true); },
+  sellAsk: (el, id) => { if (el.dataset.arm) return A('sellBiz', { id }); el.dataset.arm = 1; el.textContent = 'точно продать?'; el.classList.add('arm'); },
   review: showReview, reviewBack: () => { overlayKey = null; render(); },
   startRandom, showShop, buyTheme, wearTheme, buyDice, wearDice,
   testCoins: () => { addCoins(1000); toast('+1000 КолесоКоинов'); drawStart(); },
@@ -1206,8 +1229,8 @@ window.UI = {
 initTg();
 applyTheme(wallet().theme);
 // самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
-const APP_V = '0.13.1';
-try {
+const APP_V = '0.14';
+if (location.protocol.startsWith('http')) try {
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
     if (!j || !j.v || j.v === APP_V) return;
     const key = 'koleso-upd-' + j.v;

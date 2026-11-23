@@ -46,7 +46,7 @@ const RULES = {
   ltvCredit: 0.1,
   debug: true,           // тестовые кнопки (+деньги, списать долг) — выключить перед релизом
   ltvFree: 0.2,          // без работы банк даёт на 20% меньше
-  freeSlots: 2,          // свободное время: +2 бизнеса без управляющего
+  freeSlots: 2,          // работа занимает 2 места из 5 на первом круге; после увольнения они свободны
   freeGig: 1.5,          // подработка без работы — от прежней зарплаты ×1,5
   rehireK: 0.8,          // вернуться на работу — зарплата ×0,8
   rehireCooldown: 5,     // после возвращения нельзя уволиться ещё 5 ходов        // «Финансовая грамотность»: +10% к доле банка
@@ -67,7 +67,11 @@ const RULES = {
   saleDiscount: 0.8,     // продать бизнес можно в любой момент за 80% рыночной цены (рыночная = взнос × фаза цикла)
   manageSlots: 3,        // сам ведёшь до 3 бизнесов; дальше нужен управляющий
   managerCut: 0.25,      // управляющий забирает 25% потока бизнеса
-  managementBonus: 2,    // навык «Менеджмент»: +2 бизнеса без управляющего
+  managementBonus: 1,    // навык «Менеджмент»: +1 место
+  // размеры бизнеса на первом круге: мелкие окупаются быстрее на каждый $, крупные дают больше дохода на место
+  sizeYield: { micro: 1.15, small: 1.08, semi: 1 },
+  sizeDown: { micro: 1, small: 1.8, semi: 1 },   // малый бизнес дороже, чтобы не пересекаться с супермаленьким
+  sizeName: { micro: 'Супермаленький бизнес', small: 'Малый бизнес', semi: 'Полусредний бизнес' },
   dilemmaChance: 0.3,    // шанс решения по бизнесу в начале своего хода
   diversifySectors: 3,   // бизнесы в 3+ отраслях — прогорают реже
   diversifyRisk: 0.7,
@@ -515,6 +519,10 @@ const ACH = [
   { id: 'bankrupt', e: '💀', n: 'Дно', d: 'Обанкротиться' },
 ];
 
+// размер каждого объекта первого круга (для слотов и доходности)
+SMALL.forEach(x => { if (x.t !== 'stock') x.size = 'micro'; });
+SBIZ.forEach(x => { x.size = 'small'; });
+BIG.forEach(x => { x.size = 'semi'; });
 const KolesoData = { DICE, THEMES, COINS, HUMAN_COLORS, SECTORS, CYCLE, DILEMMAS, ACH, SKILLS, RULES, DIFF, PROFS, BOTS, CELLS, CT, SMALL, BIG, MARKET, TEMPT, SURPRISE, GAMBLES, SBIZ,
                      MCELLS, MT, MBIZ, MEVENTS, MGAMBLES, LUX, TICK, NEWS,
                      FCELLS, DREAM_CELLS, FT, DISASTER_TEXT, DREAMS, FAST, VENTURE };
