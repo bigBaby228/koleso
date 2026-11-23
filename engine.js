@@ -60,6 +60,8 @@ const canBorrow = (s, p, n, kind) => p.mode !== 'fast' && (diff(s).minF === null
   || cashflow(s, p) - n * rateFor(s, p, kind) >= p.salary * Math.max(diff(s).minF, phase(s).tight ? 0.1 : 0));
 const debtFree = p => p.loans.length === 0;
 const st = p => p.stats || (p.stats = {});
+// история решений человека — для разбора после партии
+function note(p, x) { if (p.bot && !p.auto) return; const h = p.hist || (p.hist = []); h.push(Object.assign({ t: p.turns }, x)); if (h.length > 80) h.shift(); }
 const skillCost = (s, p, sk) => scaleCost(s, p, D.SKILLS.find(x => x.id === sk).cost);
 // Масштаб сделок малого круга: чем больше у профессии расходы, тем крупнее ей предлагают сделки
 const dealScale = p => Math.max(0.45, p.exp.reduce((x, e) => x + e[1], 0) / R.dealScaleBase);
@@ -178,12 +180,20 @@ function handle(s, a, ev) {
       if (as) { const res = applyEff(s, p, as, opt[1], ev); if (s.phase === 'over') return; if (p.bankrupt) return advance(s); toast(ev, pid, `${opt[0]}: ${res || 'без изменений'}`); if (!p.bot) say(s, pid, `${as.n}: ${opt[0].toLowerCase()} → ${res || 'без изменений'}`); }
       return finishCard(s, p, ev);
     }
+    case 'dbg': {
+      need(R.debug, 'Тестовые кнопки выключены');
+      if (a.k === 'cash') { const n = Math.max(-1e7, Math.min(1e7, Math.floor(+a.n || 0))); p.cash += n; sys(s, `🧪 Тест: ${p.name} ${n >= 0 ? '+' : '−'}${money(Math.abs(n))}`); }
+      else if (a.k === 'debt') { p.loans = []; p.assets.forEach(x => { if (x.loan) { x.loan = 0; delete x.loanRate; } }); sys(s, `🧪 Тест: ${p.name} списал(а) все долги`); }
+      else need(false, 'Неизвестная тестовая команда');
+      return;
+    }
     case 'quit': {
       need(s.phase === 'roll' && myTurn, 'Уволиться можно в свой ход до броска');
       need(p.mode !== 'fast', 'В Большой игре работы уже нет');
       need(!p.free && p.salary > 0, 'Ты и так без работы');
       need(p.rehiredAt == null || p.turns - p.rehiredAt >= R.rehireCooldown, (n => `Только вернулся(ась) на работу. Уволиться можно через ${n} ${n === 1 ? 'ход' : n < 5 ? 'хода' : 'ходов'}.`)(R.rehireCooldown - (p.turns - p.rehiredAt)));
       p.jobSalary = p.salary; p.salary = 0; p.free = true;
+      note(p, { k: 'quit', v: p.jobSalary });
       (p.stats = p.stats || {}).quit = 1;
       say(s, pid, `Уволился(ась) с работы! Теперь только бизнес 🕊`);
       toast(ev, pid, `🕊 Ты свободен. Зарплаты нет, зато на сделках два варианта на выбор и +${R.freeSlots} бизнеса без управляющего. Банк даёт на ${Math.round(R.ltvFree * 100)}% меньше.`);
@@ -210,6 +220,7 @@ function handle(s, a, ev) {
       need(p.mode !== 'fast', 'В Большой игре бизнесы не продаются');
       const as = p.assets.find(x => x.id === a.id && x.t !== 'stock'); need(as, 'Нет такого бизнеса');
       const v = salePrice(s, as); p.cash += v; p.assets = p.assets.filter(x => x !== as);
+      note(p, { k: 'sell', n: as.n, e: as.e, v, down: as.down, flow: as.flow });
       say(s, pid, `Продал(а) ${as.n} за ${money(v)}`);
       return;
     }
@@ -317,7 +328,7 @@ function handle(s, a, ev) {
     case 'ok':
       need(s.phase === 'card' && myTurn && c, 'Нет активной карточки');
       if (c.kind === 'deal' && c.auction && !c.auction.done) { auctionToBot(s, c); return finishCard(s, p, ev); }
-      if (c.kind === 'deal' && a.type === 'pass') makeOffer(s, p, c);
+      if (c.kind === 'deal' && a.type === 'pass') { note(p, { k: 'pass', n: c.deal.n, e: c.deal.e, down: c.deal.down, flow: c.deal.flow, est: c.deal.est }); makeOffer(s, p, c); }
       if (c.kind === 'raid' && c.inv) loseCompany(s, p, c.inv);
       return finishCard(s, p, ev);
     case 'trade': return doTrade(s, p, a, ev);
@@ -326,6 +337,7 @@ function handle(s, a, ev) {
       need(p.mode !== 'fast', 'В Большой игре кредитов нет');
       need(canBorrow(s, p, n, 'cash'), 'Банк отказал: поток слишком маленький');
       const rr = rateFor(s, p, 'cash'); borrow(s, p, n, 'cash');
+      note(p, { k: 'cash', amt: n, rate: rr });
       toast(ev, pid, `Потребкредит ${money(n)} под ${pct(rr)}: −${money(n * rr)}/мес`);
       return;
     }
@@ -563,6 +575,7 @@ function doGamble(s, p, c, ev) {
     res.debt = Math.round(ri(s, c.g.debt[0], c.g.debt[1]) * k * c.scale / 500) * 500;
     p.loans.push({ amt: res.debt, rate: R.shadyRate, shady: true }); st(p).shady = true;
   }
+  note(p, { k: 'gamble', n: c.g.n, e: c.g.e, net: o === 'win' ? res.prize : o === 'even' ? 0 : -(res.lost + res.debt) });
   c.result = res;
   const line = { win: `🎲 Темка «${c.g.n}» зашла: +${money(res.prize)} 🤑`, even: `🎲 Темка «${c.g.n}»: вышел(а) в ноль`, lose: `🎲 Темка «${c.g.n}» не зашла: −${money(c.stake)}`,
     zero: `🎲 Темка «${c.g.n}» провалилась: ${p.name} потерял(а) все наличные 💀`, debt: `🎲 Темка «${c.g.n}» провалилась: ${p.name} без денег и с долгом коллекторам ${money(res.debt)} 😱` }[o];
@@ -671,6 +684,7 @@ function doBuy(s, p, a, ev) {
     if (L) borrow(s, p, L, lk);
     p.cash -= cost;
     p.assets.push(Object.assign({}, d, { id: ++s.uid }, L ? { loan: L, loanRate: rate, lkind: lk } : {}));
+    note(p, { k: 'buy', n: d.n, e: d.e, down: d.down, cost, flow: d.flow, est: d.est, L, pay: payL });
     say(s, p.id, `Купил(а) <b>${d.n}</b>${L ? ` в ${lk === 'short' ? 'короткий ' : ''}кредит ${money(L)}` : ' за свои'} +${money(d.flow)}/мес`);
     const surprise = d.est != null && !has(p, 'analytics') && Math.abs(d.flow - d.est) >= d.est * 0.1 ? (d.flow < d.est ? ` Доход оказался ниже обещанного (${money(d.est)}).` : ` Доход выше обещанного (${money(d.est)}).`) : '';
     if (L && payL > d.flow) toast(ev, p.id, `⚠️ ${d.n}: платёж банку ${money(payL)} больше дохода ${money(d.flow)}. Бизнес в минусе на ${money(payL - d.flow)}/мес.${surprise}`);

@@ -202,7 +202,7 @@ function debugFast() {
 const nameOf = pid => pid === ME ? 'Ты' : S.players[pid].name;
 function A(type, extra) { if (tut) return toast('Это обучение — кнопки только для примера'); dispatch(Object.assign({ type, pid: ME }, extra || {})); }
 function dispatch(a) {
-  if (busy && !a._bot) { toast('Подожди, сейчас ход другого игрока'); return; }
+  if (busy && !a._bot && a.type !== 'dbg') { toast('Подожди, сейчас ход другого игрока'); return; }
   if (NET.on) {
     if (NET.pend) return;
     if (!NET.ws || NET.ws.readyState !== 1) return toast('Нет связи с сервером, переподключаюсь…');
@@ -279,13 +279,14 @@ function render() {
     $('hGoalTxt').innerHTML = mid ? `Цель: поток ${money(D.RULES.fastFlow)}` : `Цель: пассивный ${money(C.passive(S, me))} из ${money(C.expenses(S, me))}`;
     $('hPct').textContent = fr + '%'; $('hBar').style.width = fr + '%';
     const goal = mid ? f >= D.RULES.fastFlow : C.passive(S, me) >= C.expenses(S, me);
+    $('hAdvice').textContent = advice(me);
     $('hGoalSub').innerHTML = C.loanTotal(me) ? (goal ? `<span class="gate">🔒 Закрой долги ${money(C.loanTotal(me))}, чтобы перейти</span>` : `Долг ${money(C.loanTotal(me))} · −${money(C.loanPay(me))}/мес`) : '';
   } else {
     const dr = D.DREAMS[me.dream], fp = C.fProgress(S, me);
     $('hFlow').textContent = '+' + hm(me.fflow); $('hFlow').className = 'v y'; $('hFlowL').textContent = 'за выплату';
     $('hGoalTxt').innerHTML = `${dr.n}: ${shortMoney(me.cash)} из ${shortMoney(me.dreamCost)}`;
     $('hPct').textContent = fp + '%'; $('hBar').style.width = fp + '%';
-    $('hGoalSub').textContent = `или поток ${shortMoney(C.fTarget(me))}`;
+    $('hGoalSub').textContent = `или поток ${shortMoney(C.fTarget(me))}`; $('hAdvice').textContent = '';
   }
   if (lastCash !== null && lastCash !== me.cash && !anim) floatTxt(me.cash - lastCash);
   lastCash = me.cash;
@@ -310,6 +311,7 @@ function render() {
   else if (S.cur !== ME) { rb.disabled = true; rb.textContent = `Ходит ${S.players[S.cur].name}…`; }
   else if (S.phase === 'card') { rb.disabled = true; rb.textContent = 'Реши по карточке'; }
   else { rb.disabled = busy; rb.textContent = me.skip > 0 ? `Пропустить ход (${me.skip})` : me.charity > 0 ? 'Нажми на кубики на столе' : 'Нажми на кубик на столе'; }
+  if (!NET.on && !tut) me.dice = wallet().dice; // скин из магазина действует и в продолженной партии
   // бросок — нажатием на кубик в центре стола
   const dz = document.getElementById('dice');
   if (dz) {
@@ -639,7 +641,7 @@ function workCard(me) {
     ${qh(`Без зарплаты поток упадёт на ${money(me.salary)}, а банк даст на ${Math.round(D.RULES.ltvFree * 100)}% меньше. Взамен: на каждой сделке можно посмотреть второй вариант, +${D.RULES.freeSlots} бизнеса без управляющего, подработка в ${String(D.RULES.freeGig).replace('.', ',')} раза больше, сокращение не грозит. Вернуться можно с зарплатой −${Math.round((1 - D.RULES.rehireK) * 100)}%.`, 'Что даёт увольнение')}</div>`;
 }
 function dbgBox() {
-  if (NET.on) return '';
+  if (!D.RULES.debug) return '';
   return `<details class="dbg"><summary>ТЕСТ</summary><div class="dbgb">
     ${[10000, 1000, -1000, -10000].map(n => `<button onclick="UI.dbg('cash',${n})">${n > 0 ? '+' : '−'}${Math.abs(n) / 1000}к</button>`).join('')}
     <button onclick="UI.dbg('debt')">Списать долг</button></div></details>`;
@@ -798,6 +800,64 @@ function openSheet(html) {
 }
 function closeSheet() { const sh = $('sheet'); sh.classList.remove('on'); $('shade').classList.remove('on'); sh.dataset.h = ''; }
 
+// оценка сделки для новичка: звёзды, окупаемость и вклад в цель круга
+function dealGrade(me, d, fl, rate, ana) {
+  const ratio = fl / Math.max(1, d.down) / rate;
+  let n = ratio >= 2.2 ? 3 : ratio >= 1.3 ? 2 : 1;
+  if ((d.risk || 0) >= 0.3 && n > 1) n--;
+  const pb = Math.ceil(d.down / Math.max(1, fl));
+  const goal = me.mode === 'mid' ? D.RULES.fastFlow : C.expenses(S, me);
+  const share = Math.max(1, Math.round(fl / Math.max(1, goal) * 100));
+  const lbl = ['', 'Слабая', 'Нормальная', 'Отличная'][n];
+  return `<div class="grade g${n}"><span class="stars">${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span> ${lbl}${ana || d.est == null ? '' : ' (по словам продавца)'} · окупится за ${pb} мес · <b>+${share}%</b> ${me.mode === 'mid' ? 'к Большой игре' : 'к свободе'}</div>`;
+}
+// что сейчас важно: одна строка в шапке
+function advice(me) {
+  if (me.mode === 'fast' || me.bankrupt) return '';
+  const f = C.cashflow(S, me), pas = C.passive(S, me), ex = C.expenses(S, me), debt = C.loanTotal(me);
+  const due = me.loans.filter(l => l.kind === 'short' && l.due - me.turns <= 2).sort((a, b) => a.due - b.due)[0];
+  const shady = me.loans.find(l => l.shady), cash = me.loans.filter(l => l.kind === 'cash').reduce((t, l) => t + l.amt * l.rate, 0);
+  if (f < 0) return `Поток в минусе: −${money(-f)} каждый месяц. Погаси дорогой кредит или продай убыточный бизнес.`;
+  if (due) { const n = Math.max(0, due.due - me.turns); return `Через ${n} ${n === 1 ? 'ход' : 'хода'} вернуть короткий кредит ${money(due.amt)}. Держи деньги, иначе перекредитуют дороже.`; }
+  if (shady) return `Долг коллекторам под ${pct(shady.rate)} в месяц. Гаси его первым (Отчёт → Банк).`;
+  if (cash > 0 && me.cash > 2000) return `Потребкредит съедает ${money(cash)}/мес. Погаси его, деньги есть.`;
+  if (me.mode === 'rat') {
+    if (pas >= ex && debt) return `Расходы покрыты! Закрой долги ${money(debt)}, и ты на среднем круге.`;
+    const need = ex - pas;
+    if (me.cash < 1500) return `Не хватает ${money(need)} пассивного дохода. Денег мало: копи до зарплаты, на сделку нужна своя доля 30%.`;
+    return `Не хватает ${money(need)} пассивного дохода в месяц. Покупай бизнесы на клетках сделок, смотри на звёзды в карточке.`;
+  }
+  if (f >= D.RULES.fastFlow && debt) return `Поток набран! Закрой долги ${money(debt)}, и ты в Большой игре.`;
+  return `До Большой игры не хватает ${money(D.RULES.fastFlow - f)} потока в месяц.`;
+}
+// разбор после партии: лучшие и худшие решения, упущенные сделки, темки и кредиты
+function showReview() {
+  const me = S.players[ME], h = me.hist || [], w = $('win');
+  const buys = h.filter(x => x.k === 'buy'), pass = h.filter(x => x.k === 'pass'), gam = h.filter(x => x.k === 'gamble'), cash = h.filter(x => x.k === 'cash');
+  const yld = x => x.flow / Math.max(1, x.down);
+  const line = (x, v, cls, sub) => `<div class="rv"><span>${x.e || '•'}</span><div class="rt">${x.n}<div class="rs">ход ${x.t}${sub ? ' · ' + sub : ''}</div></div><span class="rv-v ${cls}">${v}</span></div>`;
+  const best = buys.slice().sort((a, b) => yld(b) - yld(a)).slice(0, 3);
+  const worst = buys.filter(x => !best.includes(x)).sort((a, b) => (a.flow - a.pay) - (b.flow - b.pay)).slice(0, 3);
+  const lied = buys.filter(x => x.est && x.flow < x.est * 0.8);
+  const goodPass = buys.length ? Math.max(...buys.map(yld)) * 0.9 : 0.06;
+  const missed = pass.filter(x => yld(x) >= Math.max(0.06, goodPass)).sort((a, b) => yld(b) - yld(a)).slice(0, 3);
+  const gNet = gam.reduce((t, x) => t + x.net, 0), cSum = cash.reduce((t, x) => t + x.amt, 0);
+  const tips = [];
+  if (buys.some(x => x.flow - x.pay < 0)) tips.push('Часть бизнесов в кредит приносила меньше, чем платёж банку. Смотри на звёзды и строку «В кредит» в карточке.');
+  if (lied.length) tips.push(`${lied.length} ${lied.length === 1 ? 'сделка оказалась' : 'сделки оказались'} хуже обещанного. «Бизнес-аналитика» показывает реальный доход заранее.`);
+  if (missed.length) tips.push('Ты пропустил(а) выгодные сделки. Если денег не хватало, держи запас наличных под свою долю 30%.');
+  if (gam.length >= 3 && gNet < 0) tips.push(`Темки в сумме: ${money(gNet)}. Они редко окупаются.`);
+  if (cash.length) tips.push(`Потребкредитов взято на ${money(cSum)}. Это самый дорогой кредит.`);
+  if (!tips.length) tips.push(buys.length ? 'Чистая партия: без грубых ошибок.' : 'Ты почти ничего не покупал(а). Пассивный доход растёт только от активов.');
+  w.innerHTML = `<h2 style="margin-top:4px">Разбор партии</h2><div class="review">
+    <div class="note">Покупок ${buys.length} · пропущено сделок ${pass.length} · темок ${gam.length}${gam.length ? ` (${gNet >= 0 ? '+' : '−'}${money(Math.abs(gNet))})` : ''}</div>
+    ${best.length ? `<h3>Лучшие покупки</h3>${best.map(x => line(x, `+${money(x.flow)}/мес`, 'g', `взнос ${money(x.down)} · окупается за ${Math.ceil(x.down / Math.max(1, x.flow))} мес`)).join('')}` : ''}
+    ${worst.length ? `<h3>Слабые покупки</h3>${worst.map(x => line(x, `${x.flow - x.pay >= 0 ? '+' : '−'}${money(Math.abs(x.flow - x.pay))}/мес`, x.flow - x.pay >= 0 ? 'y' : 'r', x.L ? `доход ${money(x.flow)} − платёж ${money(x.pay)}` : `доход ${money(x.flow)}${x.est && x.flow < x.est * 0.8 ? `, обещали ${money(x.est)}` : ''}`)).join('')}` : ''}
+    ${missed.length ? `<h3>Упущено</h3>${missed.map(x => line(x, `+${money(x.flow)}/мес`, 'y', `взнос ${money(x.down)}`)).join('')}` : ''}
+    <h3>Что улучшить</h3>${tips.map(t => `<div class="rv"><div class="rt">${t}</div></div>`).join('')}
+  </div><button class="b sec" style="width:100%;margin-top:10px" onclick="UI.reviewBack()">Назад</button>`;
+  w.scrollTop = 0;
+}
 function cardHTML(c) {
   const me = S.players[ME];
   const btn = (txt, act, cls, dis) => `<button class="b ${cls || ''}" onclick="${act}" ${dis ? 'disabled' : ''}>${txt}</button>`;
@@ -812,7 +872,7 @@ function cardHTML(c) {
       const fl = C.seen(me, d), ltv = Math.round(C.ltvOf(S, me) * 100);
       const nBiz = me.assets.filter(C.isBiz).length, isB = d.cat !== 'flat' && d.cat !== 'house';
       const head = `<div class="kind" style="color:${c.tier === 'mid' ? '#5fe0c4' : c.tier === 'sbiz' ? '#5fc8e0' : c.big ? '#a58cff' : '#6ab3f3'}">${c.tier === 'mid' ? 'Средний бизнес' : c.tier === 'sbiz' ? 'Малый бизнес' : c.big ? 'Крупная сделка' : 'Малая сделка'}${c.fromOffer ? ' · из чата' : ''}</div>
-      <div class="sh-e">${d.e}</div><div class="sh-t">${d.n}</div><div class="sh-d">${d.d}</div>`;
+      <div class="sh-e">${d.e}</div><div class="sh-t">${d.n}</div><div class="sh-d">${d.d}</div>${dealGrade(me, d, fl, rate, ana)}`;
       const rows = rowsHTML([['Взнос', money(d.down) + (au && au.done && au.price > (au.log[0] || [0, 0])[1] ? ' (торги)' : '')],
         ana || d.est == null ? ['Поток', '+' + money(d.flow) + '/мес', 'g'] : ['Поток (обещают)', `≈ +${money(d.est)}/мес`, 'g'],
         ['Отрасль', (D.SECTORS[C.secOf(d)] || {}).n || '—'],
@@ -1039,7 +1099,7 @@ function renderOverlay() {
   if (key === 'out') {
     w.className = 'win lose';
     w.innerHTML = `<div class="big">💀</div><h2>Ты банкрот</h2><p>Партия продолжается без тебя. Можешь досмотреть, кто победит.</p>
-    ${coinLine(awardGame())}<div class="btns"><button class="b" onclick="UI.watch()">Смотреть партию</button><button class="b sec" onclick="UI.leaveRoom()">Выйти из комнаты</button></div>`;
+    ${coinLine(awardGame())}<div class="btns"><button class="b" onclick="UI.watch()">Смотреть партию</button>${(me.hist || []).length ? '<button class="b sec" onclick="UI.review()">Разбор партии</button>' : ''}<button class="b sec" onclick="UI.leaveRoom()">Выйти из комнаты</button></div>`;
     w.classList.remove('hidden'); return;
   }
   if (key === 'stage') {
@@ -1092,6 +1152,7 @@ function renderOverlay() {
     }
     const n = awardGame(), bt = w.querySelector('.btns');
     if (n && bt) bt.insertAdjacentHTML('beforebegin', coinLine(n));
+    if (bt && (me.hist || []).length) bt.insertAdjacentHTML('beforeend', '<button class="b sec" onclick="UI.review()">Разбор партии</button>');
   }
   w.classList.remove('hidden');
 }
@@ -1117,16 +1178,11 @@ window.UI = {
   setRepay: n => { repayAmt = n; render(); },
   showAch, showRules, closeAch: () => { $('win').classList.add('hidden'); overlayKey = null; if (S) render(); else drawStart(); },
   setMode: k => { profMode = k; drawStart(); },
+  review: showReview, reviewBack: () => { overlayKey = null; render(); },
   startRandom, showShop, buyTheme, wearTheme, buyDice, wearDice,
   testCoins: () => { addCoins(1000); toast('+1000 КолесоКоинов'); drawStart(); },
   quitJob: el => { if (el.dataset.arm) return A('quit'); el.dataset.arm = 1; el.textContent = 'Точно уволиться? Нажми ещё раз'; },
-  dbg: (k, n) => {
-    if (NET.on || !S) return;
-    const me = S.players[ME];
-    if (k === 'cash') me.cash += n;
-    if (k === 'debt') { me.loans = []; me.assets.forEach(a => { if (a.loan) { a.loan = 0; delete a.loanRate; } }); }
-    save(); render(); toast('Тест: готово');
-  },
+  dbg: (k, n) => { if (S) dispatch({ type: 'dbg', pid: ME, k, n }); },
   online: () => netOpen(null), joinCode: () => { const c = ($('joinInp').value || '').trim().toUpperCase(); if (c) netOpen(c); },
   rejoin: () => { const c = lsGet(ROOMKEY); if (c) netOpen(c); },
   addBot: () => netSend({ t: 'addBot' }), kick: i => netSend({ t: 'kick', i }), lobbyDiff: k => netSend({ t: 'diff', k }),
