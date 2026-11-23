@@ -11,7 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { RoomCore, checkTelegram } from './room.mjs';
 import E from '../engine.js';
 
-const SERVER_VERSION = '0.13.1';
+const SERVER_VERSION = '0.13.2';
 
 const CODE_RE = /^[A-Z0-9]{4,8}$/;
 
@@ -61,7 +61,7 @@ export class Room extends DurableObject {
         const text = !this.env.BOT_TOKEN ? 'Сервер не настроен: не задан токен бота.' : 'Не получилось проверить Telegram. Открой игру через бота.';
         return ws.send(JSON.stringify({ t: 'fatal', text }));
       }
-      return this.core.hello(ws, who, { create: !!m.create, code: m.code, diff: m.diff });
+      return this.core.hello(ws, who, { create: !!m.create, code: m.code, diff: m.diff, dice: typeof m.dice === 'string' ? m.dice : 'classic' });
     }
     this.core.message(ws, m);
   }
