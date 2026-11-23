@@ -43,7 +43,12 @@ const RULES = {
   dealScaleBase: 2500,   // сделки малого круга ×(расходы профессии / 2500), минимум ×1
   ltv: 0.7,              // банк даёт не больше 70% взноса, остальное — свои деньги
   ltvCrisis: 0.5,        // в кризис — не больше 50%
-  ltvCredit: 0.1,        // «Финансовая грамотность»: +10% к доле банка
+  ltvCredit: 0.1,
+  ltvFree: 0.2,          // без работы банк даёт на 20% меньше
+  freeSlots: 2,          // свободное время: +2 бизнеса без управляющего
+  freeGig: 1.5,          // подработка без работы — от прежней зарплаты ×1,5
+  rehireK: 0.8,          // вернуться на работу — зарплата ×0,8
+  rehireCooldown: 5,     // после возвращения нельзя уволиться ещё 5 ходов        // «Финансовая грамотность»: +10% к доле банка
   cashDisc: 0.9,         // покупка целиком за свои — скидка 10%
   floatK: 1,             // длинный кредит плавающий: ставка двигается вместе с фазой экономики
   fog: [0.6, 1.25],      // реальный доход сделки = заявленный × 0,6…1,25 (точно видно с «Бизнес-аналитикой»)
@@ -143,6 +148,15 @@ const THEMES = [
   { id: 'sakura', n: 'Сакура', d: 'Пудрово-розовая тема, стол из белого дерева с лепестками.', price: 300, bg: '#2a1a22', hdr: '#3a2430', sw: ['#2a1a22', '#ff7aa8', '#ffd6e4'] },
   { id: 'terminal', n: 'Терминал', d: 'Зелёный моноширинный шрифт на чёрном, стол как схема на радаре.', price: 400, bg: '#000000', hdr: '#031a08', sw: ['#000000', '#39ff6a', '#0f7a32'] },
   { id: 'gold', n: 'Золото', d: 'Чёрная кожа и золото на всех столах, для тех, кто уже вышел из колеса.', price: 500, bg: '#0b0b0b', hdr: '#17140e', sw: ['#0b0b0b', '#e8c25a', '#3a2c12'] },
+];
+// Скины кубиков: видны всем за столом, когда ты бросаешь
+const DICE = [
+  { id: 'classic', n: 'Классика', d: 'Белая кость, чёрные точки.', price: 0 },
+  { id: 'wood', n: 'Дерево', d: 'Тёплый орех с выжженными точками.', price: 150 },
+  { id: 'ruby', n: 'Рубин', d: 'Полупрозрачный красный, как в казино.', price: 200 },
+  { id: 'ice', n: 'Лёд', d: 'Прозрачно-голубой с инеем.', price: 200 },
+  { id: 'neon', n: 'Неон', d: 'Чёрный кубик со светящимися точками.', price: 300 },
+  { id: 'gold', n: 'Золото', d: 'Литое золото с бриллиантовыми точками.', price: 500 },
 ];
 // КолесоКоины за партию (до множителя сложности)
 const COINS = { win: 100, play: 25, bankrupt: 10, mid: 15, fast: 30, ach: 20, friends: 1.2, diff: { easy: 0.6, normal: 1, hard: 1.6 } };
@@ -500,7 +514,7 @@ const ACH = [
   { id: 'bankrupt', e: '💀', n: 'Дно', d: 'Обанкротиться' },
 ];
 
-const KolesoData = { THEMES, COINS, HUMAN_COLORS, SECTORS, CYCLE, DILEMMAS, ACH, SKILLS, RULES, DIFF, PROFS, BOTS, CELLS, CT, SMALL, BIG, MARKET, TEMPT, SURPRISE, GAMBLES, SBIZ,
+const KolesoData = { DICE, THEMES, COINS, HUMAN_COLORS, SECTORS, CYCLE, DILEMMAS, ACH, SKILLS, RULES, DIFF, PROFS, BOTS, CELLS, CT, SMALL, BIG, MARKET, TEMPT, SURPRISE, GAMBLES, SBIZ,
                      MCELLS, MT, MBIZ, MEVENTS, MGAMBLES, LUX, TICK, NEWS,
                      FCELLS, DREAM_CELLS, FT, DISASTER_TEXT, DREAMS, FAST, VENTURE };
 if (typeof module === 'object' && module.exports) module.exports = KolesoData;

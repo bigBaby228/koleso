@@ -23,8 +23,8 @@ function clearSave() { try { localStorage.removeItem(SAVE); } catch (e) { /* ign
 /* ---------- кошелёк и темы ---------- */
 const WALLET = 'koleso-wallet-v1';
 function wallet() {
-  try { const w = JSON.parse(localStorage.getItem(WALLET)); if (w && typeof w.coins === 'number') return Object.assign({ owned: ['classic'], theme: 'classic', paid: [] }, w); } catch (e) { /* ignore */ }
-  return { coins: 0, owned: ['classic'], theme: 'classic', paid: [] };
+  try { const w = JSON.parse(localStorage.getItem(WALLET)); if (w && typeof w.coins === 'number') return Object.assign({ owned: ['classic'], theme: 'classic', paid: [], dice: 'classic', ownedDice: ['classic'] }, w); } catch (e) { /* ignore */ }
+  return { coins: 0, owned: ['classic'], theme: 'classic', paid: [], dice: 'classic', ownedDice: ['classic'] };
 }
 function walletSave(w) { try { localStorage.setItem(WALLET, JSON.stringify(w)); } catch (e) { /* ignore */ } }
 function addCoins(n) { const w = wallet(); w.coins += n; walletSave(w); }
@@ -51,10 +51,27 @@ function awardGame() {
   return n;
 }
 const coinLine = n => n ? `<div class="coinwin">+${n} <span class="coin">К</span> КолесоКоинов</div>` : '';
-function showShop() {
+let shopTab = 'themes';
+function showShop(tab) {
+  if (tab) shopTab = tab;
   const w = $('win'), wl = wallet();
   w.className = 'win';
-  w.innerHTML = `<h2 style="margin-top:4px">Магазин</h2><div class="wallet"><span class="coin">К</span> ${wl.coins.toLocaleString('ru-RU')} КолесоКоинов</div>
+  const tabs = `<div class="seg" style="width:100%;margin-bottom:10px">${[['themes', 'Темы'], ['dice', 'Кубики']].map(([k, n]) => `<button class="${shopTab === k ? 'on' : ''}" onclick="UI.showShop('${k}')">${n}</button>`).join('')}</div>`;
+  if (shopTab === 'dice') {
+    w.innerHTML = `<h2 style="margin-top:4px">Магазин</h2><div class="wallet"><span class="coin">К</span> ${wl.coins.toLocaleString('ru-RU')} КолесоКоинов</div>${tabs}
+    <div class="note" style="margin:0 0 10px;text-align:center">Скин кубика видят все игроки за столом, когда ты бросаешь.</div>
+    <div class="shop">${D.DICE.map(t => {
+      const own = wl.ownedDice.includes(t.id), on = wl.dice === t.id;
+      const b = on ? '<button class="b sec" disabled>Выбран</button>'
+        : own ? `<button class="b" onclick="UI.wearDice('${t.id}')">Выбрать</button>`
+        : `<button class="b ${wl.coins >= t.price ? 'warn' : ''}" ${wl.coins >= t.price ? '' : 'disabled'} onclick="UI.buyDice('${t.id}')"><span class="coin">К</span> ${t.price}</button>`;
+      return `<div class="theme ${on ? 'on' : ''}"><div class="dice sk-${t.id} dprev">${KolesoTable.dieHTML(5)}</div>
+        <div class="ti"><div class="tn">${t.n}</div><div class="td">${t.d}</div></div>${b}</div>`;
+    }).join('')}</div>
+    <button class="b sec" style="width:100%;margin-top:10px" onclick="UI.closeAch()">Закрыть</button>`;
+    return w.classList.remove('hidden');
+  }
+  w.innerHTML = `<h2 style="margin-top:4px">Магазин</h2><div class="wallet"><span class="coin">К</span> ${wl.coins.toLocaleString('ru-RU')} КолесоКоинов</div>${tabs}
     <div class="note" style="margin:0 0 10px;text-align:center">Коины дают за каждую партию: победа ${D.COINS.win}, участие ${D.COINS.play}, достижение ${D.COINS.ach}. Хардкор ×${D.COINS.diff.hard}, игра с друзьями ×${D.COINS.friends}.</div>
     <div class="shop">${D.THEMES.map(t => {
       const own = wl.owned.includes(t.id), on = wl.theme === t.id;
@@ -74,6 +91,15 @@ function buyTheme(id) {
   w.coins -= t.price; w.owned.push(id); w.theme = id; walletSave(w);
   applyTheme(id); haptic('ok'); toast(`Тема «${t.n}» куплена и надета`); showShop(); drawStart();
 }
+function buyDice(id) {
+  const t = D.DICE.find(x => x.id === id), w = wallet();
+  if (!t || w.ownedDice.includes(id)) return;
+  if (w.coins < t.price) return toast('Не хватает КолесоКоинов');
+  w.coins -= t.price; w.ownedDice.push(id); w.dice = id; walletSave(w);
+  if (S && !NET.on) S.players[ME].dice = id;
+  haptic('ok'); toast(`Кубик «${t.n}» куплен`); showShop(); drawStart();
+}
+function wearDice(id) { const w = wallet(); if (!w.ownedDice.includes(id)) return; w.dice = id; walletSave(w); if (S && !NET.on) S.players[ME].dice = id; showShop(); }
 function wearTheme(id) { const w = wallet(); if (!w.owned.includes(id)) return; w.theme = id; walletSave(w); applyTheme(id); showShop(); }
 
 function initTg() {
@@ -128,8 +154,9 @@ function showGame() {
 }
 function start(prof) {
   S = E.newGame({ prof, diff: diffSel, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) | 0, name: tgName() });
+  S.players[0].dice = wallet().dice;
   seenLog = 0; seenNews = 0;
-  showGame(); setLast('Бросай кубик, чтобы начать'); save(); render();
+  showGame(); setLast('Нажми на кубик, чтобы начать'); save(); render();
 }
 function showRules() {
   const w = $('win'); w.className = 'win';
@@ -220,10 +247,10 @@ function animateRoll(e, cb) {
   if (mine) haptic('medium');
   let k = 0;
   const iv = setInterval(() => {
-    KolesoTable.dice(e.dice.map(() => 1 + Math.floor(Math.random() * 6)), true);
+    KolesoTable.dice(e.dice.map(() => 1 + Math.floor(Math.random() * 6)), true, p.dice);
     if (++k > (mine ? 8 : 4)) {
       clearInterval(iv);
-      KolesoTable.dice(e.dice, false);
+      KolesoTable.dice(e.dice, false, p.dice);
       setLast(mine ? `Выпало <b>${e.steps}</b>` : `${p.name}: <b>${e.steps}</b>`);
       if (!visible) return setTimeout(cb, 200);
       step(0);
@@ -242,7 +269,7 @@ function render() {
   const me = S.players[ME], fast = me.mode === 'fast', mid = me.mode === 'mid';
   $('app').classList.toggle('fast', fast); $('app').classList.toggle('mid', mid);
   if (builtKey !== me.mode + '|' + me.dream) buildBoard();
-  $('hAva').textContent = me.emoji; $('hProf').textContent = me.profName; $('hTurn').textContent = me.turns; $('hDiff').textContent = D.DIFF[S.diff].n;
+  $('hAva').textContent = me.emoji; $('hProf').textContent = me.profName; $('hTurn').textContent = me.turns; $('hDiff').textContent = D.DIFF[S.diff].n + (me.free ? ' · без работы' : '');
   $('hMode').innerHTML = fast ? '<span class="modetag">БОЛЬШАЯ ИГРА</span>' : mid ? '<span class="modetag mid">СРЕДНИЙ КРУГ</span>' : '';
   const hm = v => Math.abs(v) >= 1e5 ? shortMoney(v) : money(v);
   $('hCash').textContent = hm(me.cash);
@@ -282,7 +309,14 @@ function render() {
   else if (me.bankrupt) { rb.disabled = true; rb.textContent = `Ты выбыл(а) · ходит ${S.players[S.cur].name}`; }
   else if (S.cur !== ME) { rb.disabled = true; rb.textContent = `Ходит ${S.players[S.cur].name}…`; }
   else if (S.phase === 'card') { rb.disabled = true; rb.textContent = 'Реши по карточке'; }
-  else { rb.disabled = busy; rb.textContent = me.skip > 0 ? `Пропустить ход (${me.skip})` : me.charity > 0 ? `Бросить 2 кубика (${me.charity})` : 'Бросить кубик'; }
+  else { rb.disabled = busy; rb.textContent = me.skip > 0 ? `Пропустить ход (${me.skip})` : me.charity > 0 ? 'Нажми на кубики на столе' : 'Нажми на кубик на столе'; }
+  // бросок — нажатием на кубик в центре стола
+  const dz = document.getElementById('dice');
+  if (dz) {
+    const tap = !rb.disabled && S.cur === ME && S.phase === 'roll' && !busy && !stageUI && !tut;
+    if (tap && (!dz.children.length || !dz.classList.contains('tap'))) KolesoTable.dice(me.charity > 0 ? [5, 2] : [5], false, me.dice);
+    dz.classList.toggle('tap', tap);
+  }
   renderSheet();
   renderOverlay();
 }
@@ -313,7 +347,7 @@ function netOpen(code) {
 function netConnect() {
   const ws = new WebSocket(SERVER.replace(/^http/, 'ws') + '/room/' + NET.code);
   NET.ws = ws;
-  ws.onopen = () => { NET.tries = 0; ws.send(JSON.stringify({ t: 'hello', initData: (tg && tg.initData) || '', guest: guestId(), name: tg ? tgName() : 'Гость ' + guestId().slice(0, 3).toUpperCase(), create: NET.create, code: NET.code, diff: diffSel })); NET.create = false; };
+  ws.onopen = () => { NET.tries = 0; ws.send(JSON.stringify({ t: 'hello', initData: (tg && tg.initData) || '', guest: guestId(), dice: wallet().dice, name: tg ? tgName() : 'Гость ' + guestId().slice(0, 3).toUpperCase(), create: NET.create, code: NET.code, diff: diffSel })); NET.create = false; };
   ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } netMsg(m); };
   ws.onclose = () => {
     if (NET.ws !== ws || NET.bye || !NET.on) return;
@@ -395,7 +429,7 @@ const TUT = [
   { sel: '.tcells', t: 'Клетки', d: 'Ходишь по кругу. Нажми на клетку в игре — увидишь, что она делает.', legend: 'rat' },
   { sel: '.hud', t: 'Цель круга', d: 'На колесе: пассивный доход должен покрыть расходы. Перейти дальше можно только без долгов.' },
   { sel: '#cyc', t: 'Экономика', d: 'Рост → пик → кризис → восстановление. В кризис сделки дешёвые, но поток падает и банк строже.' },
-  { sel: '#rollBtn', t: 'Ход', d: 'Бросай кубик. Иногда перед броском бизнес просит принять решение.' },
+  { sel: '#dice', t: 'Ход', d: 'Нажми на кубик в центре стола, чтобы бросить. Скин кубика видят все за столом. Иногда перед броском бизнес просит принять решение.' },
   { card: 'deal', t: 'Сделки и кредиты', d: 'Банк даёт до 70% взноса, остальное — свои. За свои целиком скидка 10%. Доход в карточке — обещание продавца, реальный может быть ниже. Длинный кредит без срока, но в кризис ставка растёт.' },
   { card: 'auction', t: 'Торги', d: 'За крупные сделки торгуются соперники. Перебивай ставку или пасуй.' },
   { card: 'dilemma', t: 'Решения по бизнесу', d: 'У каждого варианта свои последствия. Иногда это лотерея.' },
@@ -436,7 +470,7 @@ function tutShow() {
     <button class="b" onclick="${tut.i === TUT.length - 1 ? 'UI.tutEnd()' : 'UI.tutGo(1)'}">${tut.i === TUT.length - 1 ? 'Начать игру' : 'Далее'}</button></div>`;
   box.classList.toggle('top', !!(st.card || st.top));
   box.classList.remove('hidden');
-  setTimeout(() => { const el = st.sel && document.querySelector(st.sel); if (el) el.classList.add('tut-hl'); }, 50);
+  setTimeout(() => { if (st.sel === '#dice') KolesoTable.dice([5], false, wallet().dice); const el = st.sel && document.querySelector(st.sel); if (el) el.classList.add('tut-hl'); }, 50);
 }
 function tutEnd() { tut = null; $('coach').classList.add('hidden'); document.querySelectorAll('.tut-hl').forEach(e => e.classList.remove('tut-hl')); clearSave(); showStart(); }
 
@@ -523,7 +557,7 @@ function floatTxt(d) {
 }
 const riskTag = r => !r ? '' : (r >= 0.35 ? '<span class="risk hi">риск высокий</span>' : '<span class="risk md">риск средний</span>');
 const qh = (text, title) => `<details class="qh"><summary>${title || 'Подробнее'}</summary><div>${text}</div></details>`;
-const dieBox = v => `<div class="dice" style="justify-content:center;margin:6px 0">${KolesoTable.dieHTML(v)}</div>`;
+const dieBox = v => `<div class="dice sk-${(S && S.players[ME].dice) || 'classic'}" style="justify-content:center;margin:6px 0">${KolesoTable.dieHTML(v)}</div>`;
 const rowsHTML = r => `<div class="rows">${r.map(x => `<div class="ln"><span class="s">${x[0]}</span><span class="${x[2] || ''}">${x[1]}</span></div>`).join('')}</div>`;
 
 /* ---------- отчёт ---------- */
@@ -559,8 +593,9 @@ function renderReport() {
     <div class="ln"><span class="s">${me.mode === 'mid' ? 'Путь к Большой игре' : 'Свобода'}</span><b class="y">${C.progress(S, me)}%</b></div>
     <div class="bar"><i style="width:${C.progress(S, me)}%"></i></div>${midLine}
   </div>
+  ${workCard(me)}
   <div class="card"><h3>Доходы</h3>
-    <div class="ln"><span>Зарплата</span><span>${money(me.salary)}</span></div>
+    <div class="ln"><span>Зарплата</span><span>${me.free ? '<span class="s">без работы</span>' : money(me.salary)}</span></div>
     ${(() => { const man = C.managedIds(me); return inc.map(a => assetLine(a, man)).join(''); })()}
     ${inc.length ? `<div class="note">Бизнесов ${inc.filter(C.isBiz).length} из ${C.slots(me)} без управляющего · отраслей ${C.sectorsCount(me)}${C.sectorsCount(me) >= D.RULES.diversifySectors ? ' — риск ниже' : ''}</div>` : ''}
     ${st.filter(a => C.divOf(S, a)).map(a => `<div class="ln"><span class="s">${D.TICK[a.tk].e} Дивиденды ${a.tk} × ${a.shares}</span><span class="g">+${money(C.divOf(S, a))}</span></div>`).join('')}
@@ -590,7 +625,24 @@ function renderReport() {
     ${C.loanTotal(me) ? repayBox(me) : ''}
     ${qh('Кредит под бизнес выдаётся при покупке сделки. Потребкредит — просто деньги на руки, он очень дорогой. Чем больше уже должен, тем выше ставка. Гасится сначала самый дорогой долг. На следующий круг можно перейти только без долгов.', 'Как работают кредиты')}
   </div>
-  <button class="testlink" onclick="UI.restart(this)">↺ Бросить партию и начать заново</button>`;
+  <button class="testlink" onclick="UI.restart(this)">↺ Бросить партию и начать заново</button>${dbgBox()}`;
+}
+function workCard(me) {
+  if (me.mode === 'fast') return '';
+  const myRoll = S.cur === ME && S.phase === 'roll' && !busy, cd = me.rehiredAt != null ? D.RULES.rehireCooldown - (me.turns - me.rehiredAt) : 0;
+  if (me.free) return `<div class="card"><h3>Работа</h3>
+    <div class="note" style="margin:0 0 8px">Ты свободен: зарплаты нет, банк даёт на ${Math.round(D.RULES.ltvFree * 100)}% меньше. Зато на сделках два варианта на выбор, +${D.RULES.freeSlots} бизнеса без управляющего, подработка ×${String(D.RULES.freeGig).replace('.', ',')}, сокращение не страшно.</div>
+    <button class="sbtn" style="width:100%" onclick="UI.A('rehire')" ${myRoll ? '' : 'disabled'}>Вернуться на работу · ${money(Math.round(me.jobSalary * D.RULES.rehireK / 10) * 10)}/мес</button></div>`;
+  return `<div class="card"><h3>Работа</h3>
+    <div class="ln"><span class="s">${me.profName}</span><span>${money(me.salary)}/мес</span></div>
+    <button class="sbtn" style="width:100%;margin-top:6px" onclick="UI.quitJob(this)" ${myRoll && cd <= 0 ? '' : 'disabled'}>${cd > 0 ? `Уволиться можно через ${cd} ход.` : 'Уволиться'}</button>
+    ${qh(`Без зарплаты поток упадёт на ${money(me.salary)}, а банк даст на ${Math.round(D.RULES.ltvFree * 100)}% меньше. Взамен: на каждой сделке можно посмотреть второй вариант, +${D.RULES.freeSlots} бизнеса без управляющего, подработка в ${String(D.RULES.freeGig).replace('.', ',')} раза больше, сокращение не грозит. Вернуться можно с зарплатой −${Math.round((1 - D.RULES.rehireK) * 100)}%.`, 'Что даёт увольнение')}</div>`;
+}
+function dbgBox() {
+  if (NET.on) return '';
+  return `<details class="dbg"><summary>ТЕСТ</summary><div class="dbgb">
+    ${[10000, 1000, -1000, -10000].map(n => `<button onclick="UI.dbg('cash',${n})">${n > 0 ? '+' : '−'}${Math.abs(n) / 1000}к</button>`).join('')}
+    <button onclick="UI.dbg('debt')">Списать долг</button></div></details>`;
 }
 function renderFastReport(me) {
   const dr = D.DREAMS[me.dream];
@@ -787,6 +839,7 @@ function cardHTML(c) {
         ${okS ? btn(`Короткий ${money(L)} · ${pct(rateS)} · ${D.RULES.shortTerm} ходов`, `UI.A('buy',{loan:${L},lkind:'short'})`, can ? 'sec' : 'warn') : ''}
         ${okL ? btn(`Длинный ${money(L)} · от ${pct(rate)}`, `UI.A('buy',{loan:${L},lkind:'deal'})`, 'sec') : ''}
         ${!can && !okL && !okS ? btn(L > 0 && me.cash < own ? `Банк даёт ${money(L)} (${ltv}%) · своих нужно ${money(own)}` : `Не хватает ${money(cp - me.cash)}`, '', '', true) : ''}
+        ${c.alt && (!au || !au.log.length) ? btn(`Другой вариант: ${c.alt.e || ''} ${c.alt.n}`, "UI.A('swap')", 'sec') : ''}
         ${btn('Отказаться', "UI.A('pass')", 'sec')}
       </div>
       ${qh(`Банк даёт не больше ${ltv}% взноса${S.cycle && D.CYCLE[S.cycle.i].tight ? ' (кризис)' : ''}, остальное — свои деньги. За свои целиком — скидка ${Math.round((1 - D.RULES.cashDisc) * 100)}%. Короткий кредит с фиксированной ставкой, его надо вернуть через ${D.RULES.shortTerm} ходов. Длинный без срока, но ставка плавающая: в кризис платёж вырастет.`, 'Как купить')}`;
@@ -1055,6 +1108,7 @@ function switchView(v) {
 }
 document.querySelectorAll('.tab').forEach(t => { t.onclick = () => switchView(t.dataset.v); });
 $('rollBtn').onclick = () => A('roll');
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#dice.tap')) A('roll'); });
 
 window.UI = {
   A, toast, switchView, start, resume, debugFast, trade,
@@ -1063,7 +1117,16 @@ window.UI = {
   setRepay: n => { repayAmt = n; render(); },
   showAch, showRules, closeAch: () => { $('win').classList.add('hidden'); overlayKey = null; if (S) render(); else drawStart(); },
   setMode: k => { profMode = k; drawStart(); },
-  startRandom, showShop, buyTheme, wearTheme,
+  startRandom, showShop, buyTheme, wearTheme, buyDice, wearDice,
+  testCoins: () => { addCoins(1000); toast('+1000 КолесоКоинов'); drawStart(); },
+  quitJob: el => { if (el.dataset.arm) return A('quit'); el.dataset.arm = 1; el.textContent = 'Точно уволиться? Нажми ещё раз'; },
+  dbg: (k, n) => {
+    if (NET.on || !S) return;
+    const me = S.players[ME];
+    if (k === 'cash') me.cash += n;
+    if (k === 'debt') { me.loans = []; me.assets.forEach(a => { if (a.loan) { a.loan = 0; delete a.loanRate; } }); }
+    save(); render(); toast('Тест: готово');
+  },
   online: () => netOpen(null), joinCode: () => { const c = ($('joinInp').value || '').trim().toUpperCase(); if (c) netOpen(c); },
   rejoin: () => { const c = lsGet(ROOMKEY); if (c) netOpen(c); },
   addBot: () => netSend({ t: 'addBot' }), kick: i => netSend({ t: 'kick', i }), lobbyDiff: k => netSend({ t: 'diff', k }),

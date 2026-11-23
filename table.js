@@ -149,10 +149,12 @@ function seats(list) {
 /* Кубики с точками */
 const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
 function dieHTML(v) { return `<div class="die">${Array.from({ length: 9 }, (_, i) => `<span class="${PIPS[v].includes(i + 1) ? 'p' : ''}"></span>`).join('')}</div>`; }
-function dice(vals, spin) {
+function dice(vals, spin, skin) {
   const el = host && host.querySelector('#dice'); if (!el) return;
   el.innerHTML = vals.map(dieHTML).join('');
   el.classList.toggle('spin', !!spin);
+  [...el.classList].filter(c => c.startsWith('sk-')).forEach(c => el.classList.remove(c));
+  el.classList.add('sk-' + (skin || 'classic'));
 }
 
 root.KolesoTable = { build, tokens, seats, dice, dieHTML, svgIcon, CELL_ICON };

@@ -38,7 +38,7 @@ const phase = s => D.CYCLE[(s.cycle && s.cycle.i) || 0];
 const secOf = a => a.sec || (a.cat === 'flat' || a.cat === 'house' ? 'realty' : 'retail');
 const cycK = (s, sec) => 1 + (phase(s).flowK - 1) * ((D.SECTORS[sec] || { cyc: 1 }).cyc);
 const isBiz = a => a.t !== 'stock' && a.cat !== 'flat' && a.cat !== 'house';
-const slots = p => R.manageSlots + (has(p, 'management') ? R.managementBonus : 0);
+const slots = p => R.manageSlots + (has(p, 'management') ? R.managementBonus : 0) + (p.free ? R.freeSlots : 0);
 function managedIds(p) { const b = p.assets.filter(isBiz).sort((x, y) => y.flow - x.flow); return new Set(b.slice(slots(p)).map(a => a.id)); }
 const assetIncome = (s, p, a, man) => a.t === 'stock' ? divOf(s, a) : Math.round(a.flow * cycK(s, secOf(a)) * ((man || managedIds(p)).has(a.id) ? 1 - R.managerCut : 1));
 const passive = (s, p) => { const man = managedIds(p); return p.assets.reduce((x, a) => x + assetIncome(s, p, a, man), 0); };
@@ -72,7 +72,7 @@ const scaleDealF = (s, p, base) => fog(s, scaleDeal(s, p, base));
 // Доход сделки известен неточно: заявленный est и реальный flow
 const fog = (s, d) => Object.assign(d, { est: d.flow, flow: Math.max(10, r10(d.flow * (R.fog[0] + rnd(s) * (R.fog[1] - R.fog[0])))) });
 const seen = (p, d) => (has(p, 'analytics') || d.est == null ? d.flow : d.est); // что видит игрок
-const ltvOf = (s, p) => (phase(s).tight ? R.ltvCrisis : R.ltv) + (has(p, 'credit') ? R.ltvCredit : 0);
+const ltvOf = (s, p) => (phase(s).tight ? R.ltvCrisis : R.ltv) + (has(p, 'credit') ? R.ltvCredit : 0) - (p.free ? R.ltvFree : 0);
 const maxDealLoan = (s, p, d) => Math.floor(d.down * ltvOf(s, p) / 100) * 100;
 const cashPrice = d => r100(d.down * R.cashDisc);
 const yieldK = s => R.yieldSpread[0] + rnd(s) * (R.yieldSpread[1] - R.yieldSpread[0]);
@@ -125,7 +125,7 @@ function newGame(opt) {
     let hi = 0, bi = 0;
     opt.seats.slice(0, 4).forEach((x, i) => {
       if (x.bot) { const b = D.BOTS[bi++ % D.BOTS.length]; s.players.push(makePlayer(i, b.fixedProf || rprof(), Object.assign({}, b, { bot: true, emoji: null }))); }
-      else s.players.push(Object.assign(makePlayer(i, x.prof || rprof(), { name: x.name || 'Игрок', color: D.HUMAN_COLORS[hi++ % D.HUMAN_COLORS.length] }), { uid: x.uid }));
+      else s.players.push(Object.assign(makePlayer(i, x.prof || rprof(), { name: x.name || 'Игрок', color: D.HUMAN_COLORS[hi++ % D.HUMAN_COLORS.length] }), { uid: x.uid, dice: D.DICE.some(k => k.id === x.dice) ? x.dice : 'classic' }));
     });
   } else {
     s.players.push(makePlayer(0, opt.prof, { name: opt.name || 'Ты', color: '#2ea6ff', bot: !!opt.allBots }));
@@ -177,6 +177,33 @@ function handle(s, a, ev) {
       const dl = D.DILEMMAS[c.di], opt = a.opt === 'b' ? dl.b : dl.a, as = p.assets.find(x => x.id === c.aid);
       if (as) { const res = applyEff(s, p, as, opt[1], ev); if (s.phase === 'over') return; if (p.bankrupt) return advance(s); toast(ev, pid, `${opt[0]}: ${res || 'без изменений'}`); if (!p.bot) say(s, pid, `${as.n}: ${opt[0].toLowerCase()} → ${res || 'без изменений'}`); }
       return finishCard(s, p, ev);
+    }
+    case 'quit': {
+      need(s.phase === 'roll' && myTurn, 'Уволиться можно в свой ход до броска');
+      need(p.mode !== 'fast', 'В Большой игре работы уже нет');
+      need(!p.free && p.salary > 0, 'Ты и так без работы');
+      need(p.rehiredAt == null || p.turns - p.rehiredAt >= R.rehireCooldown, (n => `Только вернулся(ась) на работу. Уволиться можно через ${n} ${n === 1 ? 'ход' : n < 5 ? 'хода' : 'ходов'}.`)(R.rehireCooldown - (p.turns - p.rehiredAt)));
+      p.jobSalary = p.salary; p.salary = 0; p.free = true;
+      (p.stats = p.stats || {}).quit = 1;
+      say(s, pid, `Уволился(ась) с работы! Теперь только бизнес 🕊`);
+      toast(ev, pid, `🕊 Ты свободен. Зарплаты нет, зато на сделках два варианта на выбор и +${R.freeSlots} бизнеса без управляющего. Банк даёт на ${Math.round(R.ltvFree * 100)}% меньше.`);
+      return;
+    }
+    case 'rehire': {
+      need(s.phase === 'roll' && myTurn, 'Устроиться можно в свой ход до броска');
+      need(p.free, 'Ты и так работаешь');
+      p.salary = r10(p.jobSalary * R.rehireK); p.free = false; p.rehiredAt = p.turns;
+      say(s, pid, `Вернулся(ась) на работу. Зарплата ${money(p.salary)}`);
+      toast(ev, pid, `💼 Снова на работе: зарплата ${money(p.salary)} (−${Math.round((1 - R.rehireK) * 100)}% за потерю стажа)`);
+      return;
+    }
+    case 'swap': {
+      need(s.phase === 'card' && myTurn && c && c.kind === 'deal' && c.alt, 'Другого варианта нет');
+      need(!c.auction || !c.auction.log.length, 'Торги уже идут');
+      [c.deal, c.alt] = [c.alt, c.deal]; c.swapped = (c.swapped || 0) + 1;
+      const auc = !!c.auction || c.big || c.tier === 'mid'; delete c.auction;
+      if (auc) setupAuction(s, p, c);
+      return;
     }
     case 'sellBiz': {
       need(s.phase === 'roll' && myTurn, 'Продать можно в свой ход до броска');
@@ -396,6 +423,7 @@ function resolve(s, p, ev) {
         s.card = { kind: 'stock', tk, price: D.TICK[tk].crypto ? Math.max(R.cryptoMin, Math.round(pr * 1e6) / 1e6) : Math.max(0.01, Math.round(pr * 100) / 100) };
       } else {
         s.card = { kind: 'deal', deal: scaleDealF(s, p, base), big: t === 'big' };
+        if (p.free) { const b2 = pick(s, (t === 'small' ? D.SMALL : D.BIG).filter(x => x.t !== 'stock')); if (b2) s.card.alt = scaleDealF(s, p, b2); }
         if (t === 'big') setupAuction(s, p, s.card);
       }
       break;
@@ -415,6 +443,7 @@ function resolve(s, p, ev) {
       break;
     }
     case 'down': {
+      if (p.free) { toast(ev, p.id, '🕊 Сокращение? Ты сам себе начальник — тебя не уволить'); return endTurn(s, p, ev); }
       const nf = perk(p, 'nofire'), paid = nf ? Math.round(expenses(s, p) / 2) : expenses(s, p);
       if (!pay(s, p, paid, ev)) return afterBankrupt(s, p);
       p.skip = nf ? 0 : 2;
@@ -426,15 +455,17 @@ function resolve(s, p, ev) {
     case 'sbiz': {
       const base = pick(s, D.SBIZ);
       s.card = { kind: 'deal', deal: scaleDealF(s, p, base), big: false, tier: 'sbiz' };
+      if (p.free) s.card.alt = scaleDealF(s, p, pick(s, D.SBIZ));
       break;
     }
     case 'gig': {
-      const amt = r10(p.salary * (R.gigShare[0] + rnd(s) * (R.gigShare[1] - R.gigShare[0])) * (perk(p, 'gig2') ? 2 : 1));
+      const amt = r10((p.free ? p.jobSalary * R.freeGig : p.salary) * (R.gigShare[0] + rnd(s) * (R.gigShare[1] - R.gigShare[0])) * (perk(p, 'gig2') ? 2 : 1));
       p.cash += amt;
       s.card = { kind: 'gig', amt };
       break;
     }
     case 'course':
+      if (p.free) { toast(ev, p.id, '🎓 Курсы повышения зарплаты — не для тех, у кого её нет'); return endTurn(s, p, ev); }
       s.card = { kind: 'course', cost: r100(p.salary * R.courseCost), raise: Math.max(10, r10(p.salary * R.courseRaise)) };
       break;
   }
@@ -448,8 +479,11 @@ function resolveMid(s, p, ev) {
     case 'mbiz': {
       const b = pick(s, D.MBIZ);
       const down = r1000(b.downF * m * phase(s).priceK * (0.9 + rnd(s) * 0.2));
-      const deal = Object.assign({}, b, { t: 'biz', cat: 'mbiz', price: r1000(down * 2.5), down: nego(p, down), nego: has(p, 'negotiation'), flow: Math.max(10, r100(b.flowF * m * midYield(p) * diff(s).flow * yieldK(s))) });
-      s.card = { kind: 'deal', deal: fog(s, deal), big: false, tier: 'mid' };
+      const mk = b => { const down = r1000(b.downF * m * phase(s).priceK * (0.9 + rnd(s) * 0.2));
+        return fog(s, Object.assign({}, b, { t: 'biz', cat: 'mbiz', price: r1000(down * 2.5), down: nego(p, down), nego: has(p, 'negotiation'), flow: Math.max(10, r100(b.flowF * m * midYield(p) * diff(s).flow * yieldK(s))) })); };
+      const deal = mk(b);
+      s.card = { kind: 'deal', deal, big: false, tier: 'mid' };
+      if (p.free) s.card.alt = mk(pick(s, D.MBIZ));
       setupAuction(s, p, s.card);
       break;
     }
@@ -1067,7 +1101,7 @@ function botMove(s, pid, p) {
 
 const KolesoEngine = {
   newGame, act, botAction, afkAction, actorId, D,
-  calc: { dreamPrice, seen, ltvOf, maxDealLoan, cashPrice, passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
+  calc: { slots, dreamPrice, seen, ltvOf, maxDealLoan, cashPrice, passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
           midF, midProgress, cap, has, rateFor, skillCost, debtFree, loadPremium,
           phase, secOf, cycK, assetIncome, managedIds, slots, sectorsCount, salePrice, isBiz, takeoverCost, takeoverFlow, influenceCost },
   fmt: { money, pct, fmtP },

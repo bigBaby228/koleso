@@ -420,3 +420,24 @@ body[class*="th-"] .mainbtn,body[class*="th-"] .b:not(.sec):not(.warn){color:var
 .th-gold .felt{background:radial-gradient(ellipse at 50% 40%,#2a2620,#0c0b09 78%) !important;box-shadow:inset 0 0 50px rgba(0,0,0,.8) !important;outline:1px solid rgba(232,194,90,.35) !important;outline-offset:-8px}
 .th-gold .tcenter{color:#e8c25a !important}
 .theme .ti{text-align:left}
+
+/* ===== кубики: бросок нажатием и скины ===== */
+.tcenter .dice.tap{pointer-events:auto;cursor:pointer;position:relative}
+.tcenter .dice.tap .die{animation:dpulse 1.3s ease-in-out infinite}
+@keyframes dpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12) rotate(-6deg)}}
+.dprev{flex-shrink:0;width:52px;height:52px;display:flex;align-items:center;justify-content:center;margin:0}
+.dice.sk-wood .die{background:radial-gradient(circle at 30% 25%,#c48a55,#8a5a30 70%);box-shadow:0 3px 6px rgba(0,0,0,.45),inset 0 -2px 0 rgba(0,0,0,.2)}
+.dice.sk-wood .die span.p::after{background:#3a2210;box-shadow:inset 0 1px 1px rgba(0,0,0,.6)}
+.dice.sk-ruby .die{background:linear-gradient(145deg,rgba(235,40,60,.95),rgba(140,0,20,.95));box-shadow:0 3px 8px rgba(160,0,30,.6),inset 0 2px 4px rgba(255,255,255,.35)}
+.dice.sk-ruby .die span.p::after{background:#fff}
+.dice.sk-ice .die{background:linear-gradient(145deg,rgba(220,245,255,.92),rgba(120,190,235,.85));box-shadow:0 3px 8px rgba(60,150,220,.5),inset 0 0 6px #fff}
+.dice.sk-ice .die span.p::after{background:#1d6fa5}
+.dice.sk-neon .die{background:#0a0a14;box-shadow:0 0 0 1.5px #2de2ff,0 0 12px rgba(45,226,255,.7)}
+.dice.sk-neon .die span.p::after{background:#ff2bd6;box-shadow:0 0 6px #ff2bd6}
+.dice.sk-gold .die{background:linear-gradient(135deg,#fff1b8,#e0b040 40%,#a87818 75%,#f5d870);box-shadow:0 3px 10px rgba(200,150,30,.6),inset 0 1px 2px #fff}
+.dice.sk-gold .die span.p::after{background:radial-gradient(circle at 35% 30%,#fff,#bfe9ff 60%,#7ab8d9);box-shadow:0 0 3px #fff}
+/* тестовый блок в отчёте */
+.dbg{margin:14px 12px 20px;font-size:11px;color:var(--hint);opacity:.7}
+.dbg summary{cursor:pointer;letter-spacing:2px}
+.dbgb{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dbgb button{background:var(--bg3);color:var(--text);border-radius:8px;padding:5px 9px;font-size:11px}

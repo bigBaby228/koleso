@@ -73,14 +73,15 @@ export class RoomCore {
           if (bi < 0) { this.io.setUid(conn, null); return this.send(conn, { t: 'fatal', text: 'За столом уже 4 игрока.' }); }
           this.d.seats.splice(bi, 1);
         }
-        this.d.seats.push({ uid: who.uid, name: who.name });
-      } else s.name = who.name;
+        this.d.seats.push({ uid: who.uid, name: who.name, dice: msg.dice });
+      } else { s.name = who.name; s.dice = msg.dice; }
       this.save();
       return this.all(this.lobbyMsg());
     }
     const seat = this.seatOf(who.uid);
     if (seat >= 0) {
       const p = st.players[seat];
+      if (E.D.DICE.some(k => k.id === msg.dice)) p.dice = msg.dice;
       if (p.auto) { p.auto = false; p.bot = false; this.d.afk[who.uid] = 0; this.sys(`${p.name} вернулся(ась) за стол`); this.schedule(); this.save(); this.broadcastGame(); return; }
     }
     this.send(conn, this.gameMsg(who.uid)); // зритель получает seat = -1
@@ -119,7 +120,7 @@ export class RoomCore {
       case 'start': {
         if (st || !isHost) return;
         if (!this.d.seats.length) return err('Нет игроков');
-        this.d.state = E.newGame({ diff: this.d.diff, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) | 0, seats: this.d.seats.map(x => ({ uid: x.uid, name: x.name, bot: x.bot })) });
+        this.d.state = E.newGame({ diff: this.d.diff, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) | 0, seats: this.d.seats.map(x => ({ uid: x.uid, name: x.name, bot: x.bot, dice: x.dice })) });
         this.d.afk = {};
         this.schedule(); this.save();
         return this.broadcastGame();
