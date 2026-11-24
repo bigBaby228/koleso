@@ -121,7 +121,7 @@ function initTg() {
 const tgName = () => (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || 'Ты';
 /* ---------- настройки ---------- */
 const SETKEY = 'koleso-settings-v1';
-const LANGS = [['ru', '🇷🇺', 'Русский'], ['uk', '🇺🇦', 'Українська'], ['en', '🇬🇧', 'English'], ['pt', '🇧🇷', 'Português'], ['tr', '🇹🇷', 'Türkçe'], ['es', '🇪🇸', 'Español']];
+const LANGS = [['ru', '🇷🇺', 'Русский'], ['en', '🇬🇧', 'English']];
 function settings() {
   let st = {}; try { st = JSON.parse(localStorage.getItem(SETKEY)) || {}; } catch (e) { /* ignore */ }
   return Object.assign({ lang: 'ru', sfx: 0.7, music: 0.35, vibro: true, lite: false }, st);
@@ -143,7 +143,6 @@ function showSettings() {
   w.innerHTML = `<h2 style="margin-top:4px">Настройки</h2><div class="settings">
     <div class="lbl">Язык</div>
     <div class="langs">${LANGS.map(([id, f, n]) => `<button class="lang ${st.lang === id ? 'on' : ''}" onclick="UI.setOpt('lang','${id}',true)">${f} ${n}</button>`).join('')}</div>
-    ${st.lang !== 'ru' ? '<div class="note">Перевод появится в следующем обновлении, пока игра на русском.</div>' : ''}
     <div class="lbl">Звук</div>
     ${sl('sfx', 'Звуки')}${sl('music', 'Музыка')}
     <div class="lbl">Прочее</div>
@@ -156,6 +155,7 @@ function setOpt(k, v, done) {
   const st = settings(); st[k] = v; settingsSave(st);
   const el = $('sv-' + k); if (el) el.textContent = Math.round(v * 100) + '%';
   if (k === 'sfx' && done) sfx('coin');
+  if (k === 'lang' && done) { if (S) save(); return location.reload(); }
   if (done && k !== 'sfx' && k !== 'music') showSettings();
 }
 function haptic(kind) {
@@ -251,6 +251,7 @@ function debugFast() {
 const nameOf = pid => pid === ME ? 'Ты' : S.players[pid].name;
 function A(type, extra) { if (tut) return toast('Это обучение — кнопки только для примера'); dispatch(Object.assign({ type, pid: ME }, extra || {})); }
 function dispatch(a) {
+  if (!S) return;
   if (busy && !a._bot && a.type !== 'dbg') { toast('Подожди, сейчас ход другого игрока'); return; }
   if (NET.on) {
     if (NET.pend) return;
@@ -260,6 +261,8 @@ function dispatch(a) {
   }
   run(E.act(S, a), a);
 }
+const VOLUNTARY = new Set(['buy','grow','hire','fireDir','bid','bidIsland','strike','dreamSwitch','quit','rehire','swap','sellBiz','study','takeOffer','buyStock','sell','trade','loan','repay','dream','expand','media','takeover','choose','dbg']);
+let quietSpend = false;
 function run(r, a) {
   if (!r.ok) { if (a.pid === ME) toast(r.events[0].text); busy = false; return; }
   const roll = r.events.find(e => e.t === 'roll' || e.t === 'skip');
@@ -277,7 +280,8 @@ function run(r, a) {
       setLast(roll.pid === ME ? `<b>${T.h.split(':')[0]}</b>` : `${p.name}: ${roll.steps} → ${T.n}`);
     }
     if (roll && roll.t === 'skip') setLast(`${nameOf(roll.pid)}: <b>пропуск хода</b>`);
-    save(); render(); achCheck();
+    quietSpend = a.pid === ME && VOLUNTARY.has(a.type);
+    save(); render(); achCheck(); quietSpend = false;
     if (myToasts.length) toast(myToasts[myToasts.length - 1]);
     if (S.phase === 'over' && S.result.type === 'win' && S.result.pid === ME) haptic('ok');
     kickBots(); netPump();
@@ -691,7 +695,7 @@ function setLast(h) { lastHTML = h || ''; const el = $('lastMsg'); if (el) el.in
 function floatTxt(d) {
   const el = $('cashBox'), r = el.getBoundingClientRect(), a = $('app').getBoundingClientRect();
   if (d > 0) { sfx('coin'); fxCoins(Math.min(10, 3 + Math.round(Math.log10(Math.max(10, d))))); }
-  else if (S && -d >= Math.max(500, Math.abs(S.players[ME].cash - d) * 0.12)) { sfx('bad'); fxHit(); }
+  else if (S && !quietSpend && -d >= Math.max(500, Math.abs(S.players[ME].cash - d) * 0.12)) { sfx('bad'); fxHit(); }
   const f = document.createElement('div'); f.className = 'float' + (d < 0 ? ' neg' : ''); f.textContent = (d > 0 ? '+' : '') + money(d);
   f.style.left = (r.left - a.left + r.width - 90) + 'px'; f.style.top = (r.top - a.top + 4) + 'px'; $('app').appendChild(f);
   setTimeout(() => f.remove(), 1100);
@@ -1450,7 +1454,7 @@ applyTheme(wallet().theme);
 applySettings();
 try { if (tg && tg.SettingsButton) { tg.SettingsButton.show(); tg.SettingsButton.onClick(showSettings); } } catch (e) { /* ignore */ }
 // самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
-const APP_V = '0.18';
+const APP_V = '0.19';
 if (location.protocol.startsWith('http')) try {
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
     if (!j || !j.v || j.v === APP_V) return;

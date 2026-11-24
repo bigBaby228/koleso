@@ -11,7 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { RoomCore, checkTelegram } from './room.mjs';
 import E from '../engine.js';
 
-const SERVER_VERSION = '0.18';
+const SERVER_VERSION = '0.19';
 
 const CODE_RE = /^[A-Z0-9]{4,8}$/;
 
