@@ -122,7 +122,7 @@ function tokens(list, here) {
     const [x, y] = geo.pos[k], arr = byCell[k];
     arr.forEach((t, j) => {
       const dx = (j - (arr.length - 1) / 2) * 9, dy = -geo.cs / 2 - 2;
-      html += `<div class="ttok ${t.me ? 'me' : ''}" style="left:${x + dx - 7}px;top:${y + dy - 7}px;--pc:${t.color}"></div>`;
+      html += `<div class="ttok ${t.me ? 'me' : ''} ${t.hop ? 'hop' : ''}" style="left:${x + dx - 7}px;top:${y + dy - 7}px;--pc:${t.color}"></div>`;
     });
   }
   host.querySelector('#ttoks').innerHTML = html;

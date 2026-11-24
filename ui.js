@@ -23,7 +23,15 @@ function clearSave() { try { localStorage.removeItem(SAVE); } catch (e) { /* ign
 /* ---------- кошелёк и темы ---------- */
 const WALLET = 'koleso-wallet-v1';
 function wallet() {
-  try { const w = JSON.parse(localStorage.getItem(WALLET)); if (w && typeof w.coins === 'number') return Object.assign({ owned: ['classic'], theme: 'classic', paid: [], dice: 'classic', ownedDice: ['classic'] }, w); } catch (e) { /* ignore */ }
+  try {
+    const w = JSON.parse(localStorage.getItem(WALLET));
+    if (w && typeof w.coins === 'number') {
+      // тема «Днепр 90-х» переименована в «Люкс 90-х» (lux90): купленное переносим
+      if (w.owned) w.owned = w.owned.map(x => (x === 'dnepr' ? 'lux90' : x));
+      if (w.theme === 'dnepr') w.theme = 'lux90';
+      return Object.assign({ owned: ['classic'], theme: 'classic', paid: [], dice: 'classic', ownedDice: ['classic'] }, w);
+    }
+  } catch (e) { /* ignore */ }
   return { coins: 0, owned: ['classic'], theme: 'classic', paid: [], dice: 'classic', ownedDice: ['classic'] };
 }
 function walletSave(w) { try { localStorage.setItem(WALLET, JSON.stringify(w)); } catch (e) { /* ignore */ } }
@@ -111,7 +119,47 @@ function initTg() {
   } catch (e) { /* старый клиент Telegram */ }
 }
 const tgName = () => (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || 'Ты';
+/* ---------- настройки ---------- */
+const SETKEY = 'koleso-settings-v1';
+const LANGS = [['ru', '🇷🇺', 'Русский'], ['uk', '🇺🇦', 'Українська'], ['en', '🇬🇧', 'English'], ['pt', '🇧🇷', 'Português'], ['tr', '🇹🇷', 'Türkçe'], ['es', '🇪🇸', 'Español']];
+function settings() {
+  let st = {}; try { st = JSON.parse(localStorage.getItem(SETKEY)) || {}; } catch (e) { /* ignore */ }
+  return Object.assign({ lang: 'ru', sfx: 0.7, music: 0.35, vibro: true, lite: false }, st);
+}
+function settingsSave(st) { try { localStorage.setItem(SETKEY, JSON.stringify(st)); } catch (e) { /* ignore */ } applySettings(st); }
+function applySettings(st) {
+  st = st || settings();
+  document.body.classList.toggle('lite', !!st.lite);
+  if (window.KolesoSound) { KolesoSound.setVolume(st.sfx, st.music); KolesoSound.music(st.music > 0); }
+}
+const sfx = n => { if (window.KolesoSound) KolesoSound.play(n); };
+function showSettings() {
+  settingsUI = true;
+  const st = settings(), w = $('win');
+  w.className = 'win';
+  const sl = (k, label) => `<div class="setrow"><span>${label}</span><b id="sv-${k}">${Math.round(st[k] * 100)}%</b></div>
+    <input class="range" type="range" min="0" max="100" value="${Math.round(st[k] * 100)}" oninput="UI.setOpt('${k}',this.value/100)" onchange="UI.setOpt('${k}',this.value/100,true)">`;
+  const tg2 = (k, label, sub) => `<button class="setrow tgl ${st[k] ? 'on' : ''}" onclick="UI.setOpt('${k}',${!st[k]},true)"><span>${label}${sub ? `<small>${sub}</small>` : ''}</span><i></i></button>`;
+  w.innerHTML = `<h2 style="margin-top:4px">Настройки</h2><div class="settings">
+    <div class="lbl">Язык</div>
+    <div class="langs">${LANGS.map(([id, f, n]) => `<button class="lang ${st.lang === id ? 'on' : ''}" onclick="UI.setOpt('lang','${id}',true)">${f} ${n}</button>`).join('')}</div>
+    ${st.lang !== 'ru' ? '<div class="note">Перевод появится в следующем обновлении, пока игра на русском.</div>' : ''}
+    <div class="lbl">Звук</div>
+    ${sl('sfx', 'Звуки')}${sl('music', 'Музыка')}
+    <div class="lbl">Прочее</div>
+    ${tg2('vibro', 'Вибрация', 'в Telegram на телефоне')}
+    ${tg2('lite', 'Меньше анимаций', 'для слабых телефонов')}
+  </div><button class="b sec" style="width:100%;margin-top:14px" onclick="UI.closeSettings()">Готово</button>`;
+  w.classList.remove('hidden');
+}
+function setOpt(k, v, done) {
+  const st = settings(); st[k] = v; settingsSave(st);
+  const el = $('sv-' + k); if (el) el.textContent = Math.round(v * 100) + '%';
+  if (k === 'sfx' && done) sfx('coin');
+  if (done && k !== 'sfx' && k !== 'music') showSettings();
+}
 function haptic(kind) {
+  if (!settings().vibro) return;
   try { if (!tg || !tg.HapticFeedback) return; if (kind === 'ok') tg.HapticFeedback.notificationOccurred('success'); else tg.HapticFeedback.impactOccurred(kind || 'light'); } catch (e) { /* ignore */ }
 }
 
@@ -218,6 +266,9 @@ function run(r, a) {
   const myToasts = r.events.filter(e => e.t === 'toast' && e.pid === ME).map(e => e.text);
   if (r.events.some(e => e.t === 'stage' && e.pid === ME)) stageUI = 'mid';
   if (a.type === 'trade' || a.type === 'buyStock') { tradeUI = null; qtyUI = null; }
+  if (a.pid === ME) { if (a.type === 'buy' || a.type === 'grow' || a.type === 'hire') sfx('buy'); if (a.type === 'bid' || a.type === 'bidIsland') sfx('bid'); }
+  if (a.type === 'strike' || r.events.some(e => e.t === 'toast' && e.pid === ME && /^🎯/.test(e.text))) sfx('alert');
+  { const was = S && S.players[ME].mode, now = r.state.players[ME].mode; if (was && now !== was) setTimeout(() => fxLevel(now), 300); }
   const finish = () => {
     S = r.state; busy = false;
     if (roll && roll.t === 'roll') {
@@ -246,6 +297,7 @@ function animateRoll(e, cb) {
   const p = S.players[e.pid], mine = e.pid === ME, me = S.players[ME];
   const visible = e.mode === me.mode;
   if (mine) haptic('medium');
+  if (e.mode === me.mode || mine) sfx('dice');
   let k = 0;
   const iv = setInterval(() => {
     KolesoTable.dice(e.dice.map(() => 1 + Math.floor(Math.random() * 6)), true, p.dice);
@@ -258,7 +310,8 @@ function animateRoll(e, cb) {
     }
   }, 70);
   function step(i) {
-    anim = { pid: e.pid, pos: (e.from + i + 1) % ringOf(p)[0].length }; renderTokens();
+    anim = { pid: e.pid, pos: (e.from + i + 1) % ringOf(p)[0].length, hop: i }; renderTokens();
+    if (mine) sfx('step');
     if (i + 1 < e.steps) setTimeout(() => step(i + 1), mine ? 150 : 80);
     else setTimeout(() => { anim = null; cb(); }, mine ? 250 : 150);
   }
@@ -273,7 +326,7 @@ function render() {
   $('hAva').textContent = me.emoji; $('hProf').textContent = me.profName; $('hTurn').textContent = me.turns; $('hDiff').textContent = D.DIFF[S.diff].n + (me.free ? ' · без работы' : '');
   $('hMode').innerHTML = fast ? '<span class="modetag">БОЛЬШАЯ ИГРА</span>' : mid ? '<span class="modetag mid">СРЕДНИЙ КРУГ</span>' : '';
   const hm = v => Math.abs(v) >= 1e5 ? shortMoney(v) : money(v);
-  $('hCash').textContent = hm(me.cash);
+  countTo('hCash', me.cash, hm);
   if (!fast) {
     const f = C.cashflow(S, me), fr = C.progress(S, me);
     $('hFlow').textContent = (f >= 0 ? '+' : '') + hm(f); $('hFlow').className = 'v ' + (f >= 0 ? 'g' : 'r'); $('hFlowL').textContent = 'поток / мес';
@@ -528,7 +581,7 @@ function cellInfo(i) {
 function renderTokens() {
   const me = S.players[ME];
   const list = S.players.filter(q => !q.bankrupt && q.mode === me.mode)
-    .map(q => ({ pos: anim && anim.pid === q.id ? anim.pos : q.pos, color: q.color, me: q.id === ME }));
+    .map(q => ({ pos: anim && anim.pid === q.id ? anim.pos : q.pos, color: q.color, me: q.id === ME, hop: !!(anim && anim.pid === q.id) }));
   KolesoTable.tokens(list, anim && anim.pid === ME ? anim.pos : me.pos);
 }
 function renderRace() {
@@ -591,9 +644,54 @@ function renderNewsbar() {
   $('newsbar').innerHTML = n ? `<span class="nt ${n.rum ? 'rum' : 'off'}">${n.rum ? '🗣 СЛУХ' : '📰'}</span><span>${n.t}</span>`
     : '<span class="nt off">📰</span><span style="color:var(--hint)">Новостей пока нет. Следи за биржей</span>';
 }
+/* ---------- визуальные эффекты ---------- */
+const lite = () => document.body.classList.contains('lite');
+// монеты летят из центра стола к твоему месту
+function fxCoins(n) {
+  if (lite()) return;
+  const app = $('app'), a = app.getBoundingClientRect(), from = document.getElementById('dice'), to = document.querySelector('.seat.s-bl .ava2') || $('cashBox');
+  if (!from || !to || $('scrGame').classList.contains('hidden')) return;
+  const f = from.getBoundingClientRect(), t = to.getBoundingClientRect();
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('div'); c.className = 'fxcoin';
+    c.style.left = (f.left - a.left + f.width / 2 - 9 + (Math.random() - 0.5) * 30) + 'px'; c.style.top = (f.top - a.top + f.height / 2 - 9 + (Math.random() - 0.5) * 20) + 'px';
+    app.appendChild(c);
+    const dx = t.left - f.left + (t.width - f.width) / 2, dy = t.top - f.top + (t.height - f.height) / 2;
+    c.animate([{ transform: 'translate(0,0) scale(.6)', opacity: 0 }, { transform: `translate(${dx * 0.35 + (Math.random() - 0.5) * 60}px,${dy * 0.35 - 40 - Math.random() * 30}px) scale(1.1)`, opacity: 1, offset: 0.4 }, { transform: `translate(${dx}px,${dy}px) scale(.7)`, opacity: 0.2 }],
+      { duration: 700 + Math.random() * 250, delay: i * 45, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'forwards' }).onfinish = () => c.remove();
+  }
+  setTimeout(() => { const s = document.querySelector('.seat.s-bl'); if (s) { s.classList.remove('fx-pop'); void s.offsetWidth; s.classList.add('fx-pop'); } }, 650);
+}
+// потеря: тряска и красные края
+function fxHit() {
+  haptic('heavy');
+  if (lite()) return;
+  const app = $('app'); app.classList.remove('fx-hit'); void app.offsetWidth; app.classList.add('fx-hit');
+  setTimeout(() => app.classList.remove('fx-hit'), 600);
+}
+// переход на новый круг: вспышка и название
+function fxLevel(mode) {
+  sfx('level'); haptic('ok');
+  if (lite()) return;
+  const d = document.createElement('div'); d.className = 'fxlevel ' + mode;
+  d.innerHTML = `<div><small>Новый уровень</small>${mode === 'fast' ? 'Большая игра' : mode === 'mid' ? 'Средний круг' : 'Колесо'}</div>`;
+  $('app').appendChild(d); setTimeout(() => d.remove(), 1900);
+}
+// плавный пересчёт суммы в шапке
+const counters = {};
+function countTo(id, to, fmt) {
+  const el = $(id); if (!el) return;
+  const from = counters[id] == null ? to : counters[id]; counters[id] = to;
+  if (lite() || from === to || Math.abs(to - from) < 2) { el.textContent = fmt(to); return; }
+  const t0 = performance.now(), dur = 550;
+  const tick = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(Math.round(from + (to - from) * e)); if (k < 1 && counters[id] === to) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
 function setLast(h) { lastHTML = h || ''; const el = $('lastMsg'); if (el) el.innerHTML = lastHTML; }
 function floatTxt(d) {
   const el = $('cashBox'), r = el.getBoundingClientRect(), a = $('app').getBoundingClientRect();
+  if (d > 0) { sfx('coin'); fxCoins(Math.min(10, 3 + Math.round(Math.log10(Math.max(10, d))))); }
+  else if (S && -d >= Math.max(500, Math.abs(S.players[ME].cash - d) * 0.12)) { sfx('bad'); fxHit(); }
   const f = document.createElement('div'); f.className = 'float' + (d < 0 ? ' neg' : ''); f.textContent = (d > 0 ? '+' : '') + money(d);
   f.style.left = (r.left - a.left + r.width - 90) + 'px'; f.style.top = (r.top - a.top + 4) + 'px'; $('app').appendChild(f);
   setTimeout(() => f.remove(), 1100);
@@ -862,6 +960,7 @@ function renderSheet() {
 }
 function openSheet(html) {
   const sh = $('sheet');
+  if (!sh.classList.contains('on')) sfx('card');
   if (sh.dataset.h !== html) { sh.innerHTML = '<div class="grab"></div>' + html; sh.dataset.h = html; }
   sh.classList.add('on'); $('shade').classList.add('on');
 }
@@ -1201,7 +1300,9 @@ function confetti() {
     $('app').appendChild(c); setTimeout(() => c.remove(), 4000);
   }
 }
+let settingsUI = false;
 function renderOverlay() {
+  if (settingsUI) return; // открыты настройки — не перекрываем
   const w = $('win'), me = S.players[ME];
   let key = null;
   if (!busy && S.phase === 'exit' && S.exitPid === ME) key = 'exit';
@@ -1277,6 +1378,7 @@ function renderOverlay() {
       <div class="grid"><div><div class="k">Наличные</div><div class="v">${money(me.cash)}</div></div><div><div class="k">Долг</div><div class="v">${money(C.loanTotal(me))}</div></div></div></div>
       <div class="btns">${againBtn('Реванш')}</div>`;
     }
+    sfx(S.result && S.result.type === 'win' && S.result.pid === ME ? 'win' : 'bad');
     const n = awardGame(), bt = w.querySelector('.btns');
     if (n && bt) bt.insertAdjacentHTML('beforebegin', coinLine(n));
     if (bt && (me.hist || []).length) bt.insertAdjacentHTML('beforeend', '<button class="b sec" onclick="UI.review()">Разбор партии</button>');
@@ -1298,6 +1400,7 @@ document.querySelectorAll('.tab').forEach(t => { t.onclick = () => switchView(t.
 $('rollBtn').onclick = () => A('roll');
 document.addEventListener('click', e => {
   if (!e.target.closest) return;
+  if (e.target.closest('button:not(:disabled)')) sfx('tap');
   if (e.target.closest('#dice.tap')) return A('roll');
   if (e.target.id === 'shade' && playerUI != null) { playerUI = null; closeSheet(); return render(); }
   const st = e.target.closest('.seat[data-pid]');
@@ -1316,6 +1419,7 @@ window.UI = {
   swapPick: id => { const c = S.card; swapSel = id == null ? null : { key: c.deal.n + ':' + c.deal.down + ':' + S.tick, id }; renderSheet(true); },
   sellAsk: (el, id) => { if (el.dataset.arm) return A('sellBiz', { id }); el.dataset.arm = 1; el.textContent = 'точно продать?'; el.classList.add('arm'); },
   review: showReview, reviewBack: () => { overlayKey = null; render(); },
+  showSettings, setOpt, closeSettings: () => { settingsUI = false; $('win').classList.add('hidden'); overlayKey = null; if (S) render(); },
   startRandom, showShop, buyTheme, wearTheme, buyDice, wearDice,
   testCoins: () => { addCoins(1000); toast('+1000 КолесоКоинов'); drawStart(); },
   quitJob: el => { if (el.dataset.arm) return A('quit'); el.dataset.arm = 1; el.textContent = 'Точно уволиться? Нажми ещё раз'; },
@@ -1343,8 +1447,10 @@ window.UI = {
 
 initTg();
 applyTheme(wallet().theme);
+applySettings();
+try { if (tg && tg.SettingsButton) { tg.SettingsButton.show(); tg.SettingsButton.onClick(showSettings); } } catch (e) { /* ignore */ }
 // самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
-const APP_V = '0.17.1';
+const APP_V = '0.18';
 if (location.protocol.startsWith('http')) try {
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
     if (!j || !j.v || j.v === APP_V) return;
