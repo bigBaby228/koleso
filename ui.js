@@ -1454,7 +1454,7 @@ applyTheme(wallet().theme);
 applySettings();
 try { if (tg && tg.SettingsButton) { tg.SettingsButton.show(); tg.SettingsButton.onClick(showSettings); } } catch (e) { /* ignore */ }
 // самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
-const APP_V = '0.19.1';
+const APP_V = '0.19.2';
 if (location.protocol.startsWith('http')) try {
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
     if (!j || !j.v || j.v === APP_V) return;

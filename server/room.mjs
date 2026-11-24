@@ -32,9 +32,13 @@ export async function checkTelegram(initData, botToken, maxAgeSec = 7 * 86400) {
   if (age > maxAgeSec) return null;
   try {
     const u = JSON.parse(p.get('user'));
-    return { uid: 'tg' + u.id, name: (u.first_name || 'Игрок').slice(0, 20) };
+    return { uid: 'tg' + u.id, name: cleanName(u.first_name) };
   } catch (e) { return null; }
 }
+
+// имя попадает в разметку у всех за столом: без угловых скобок и кавычек
+export const cleanName = n => String(n || '').replace(/[<>&"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20) || 'Игрок';
+export const IDLE_MS = 24 * 3600 * 1000; // пустую комнату без движения удаляем через сутки
 
 /* ---------- комната ---------- */
 export class RoomCore {
@@ -43,7 +47,10 @@ export class RoomCore {
     this.afkMs = (opts && opts.afkMs) || AFK_MS;
     this.d = data || null; // { code, host, seats:[{uid,name,bot}], diff, state, afk:{uid:n}, deadline }
   }
-  save() { this.io.save(this.d); }
+  save() {
+    if (this.d) { this.d.ts = this.io.now(); if (!this.d.state) this.io.setAlarm(IDLE_MS); } // в лобби — только будильник на уборку
+    this.io.save(this.d);
+  }
   send(conn, msg) { this.io.send(conn, msg); }
   all(msg) { for (const c of this.io.conns()) if (this.io.uidOf(c)) this.io.send(c, msg); }
   online() { return new Set(this.io.conns().map(c => this.io.uidOf(c)).filter(Boolean)); }
@@ -59,6 +66,8 @@ export class RoomCore {
 
   /* первое сообщение от клиента: кто он и что хочет */
   hello(conn, who, msg) {
+    who = { uid: who.uid, name: cleanName(who.name) };
+    msg = Object.assign({}, msg, { dice: E.D.DICE.some(k => k.id === msg.dice) ? msg.dice : 'classic' });
     if (!this.d) {
       if (!msg.create) return this.send(conn, { t: 'fatal', text: 'Комната не найдена. Попроси друга прислать новую ссылку.' });
       this.d = { code: msg.code, host: who.uid, seats: [], diff: D_DIFF(msg.diff), state: null, afk: {}, deadline: 0 };
@@ -78,6 +87,7 @@ export class RoomCore {
       this.save();
       return this.all(this.lobbyMsg());
     }
+    if (this.d.paused) { this.d.paused = false; this.schedule(); this.save(); }
     const seat = this.seatOf(who.uid);
     if (seat >= 0) {
       const p = st.players[seat];
@@ -168,15 +178,19 @@ export class RoomCore {
   /* кто ходит следующим и когда разбудить комнату */
   schedule() {
     const s = this.d.state;
-    if (!s || s.phase === 'over') { this.d.deadline = 0; return this.io.setAlarm(null); }
+    if (!s || s.phase === 'over') { this.d.deadline = 0; return this.io.setAlarm(IDLE_MS); }
     const p = s.players[E.actorId(s)];
     if (p.bot) { this.d.deadline = 0; return this.io.setAlarm(BOT_MS); }
     this.d.deadline = this.io.now() + this.afkMs;
     this.io.setAlarm(this.afkMs);
   }
+  // true — комнату можно удалить: давно никого и ничего не происходит
+  idle() { return !this.d || (!this.online().size && this.io.now() - (this.d.ts || 0) >= IDLE_MS - 60000); }
   alarm() {
     const s = this.d && this.d.state;
-    if (!s || s.phase === 'over') return;
+    if (!s || s.phase === 'over' || this.d.paused) return;
+    // за столом никого: не крутим партию впустую, ждём, пока кто-нибудь зайдёт
+    if (!this.online().size) { this.d.paused = true; this.d.deadline = 0; this.io.setAlarm(IDLE_MS); this.save(); return; }
     const p = s.players[E.actorId(s)];
     if (p.bot) {
       const a = E.botAction(s);

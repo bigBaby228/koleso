@@ -18,7 +18,7 @@ const rooms = new Map();
 
 function room(code) {
   if (rooms.has(code)) return rooms.get(code);
-  const r = { conns: new Set(), timer: null, data: null };
+  const r = { conns: new Set(), timer: null, data: null, code };
   const io = {
     send: (c, m) => c.send(JSON.stringify(m)),
     conns: () => [...r.conns],
@@ -79,7 +79,7 @@ server.on('upgrade', (req, sock) => {
       if (msg.t === 'hello') {
         const g = /^[a-z0-9]{6,20}$/.test(msg.guest || '') ? msg.guest : null;
         if (!g) { conn.send(JSON.stringify({ t: 'fatal', text: 'Нужен гостевой id' })); continue; }
-        r.core.hello(conn, { uid: 'g' + g, name: String(msg.name || 'Гость').slice(0, 20) }, { create: !!msg.create, code: msg.code, diff: msg.diff, dice: typeof msg.dice === 'string' ? msg.dice : 'classic' });
+        r.core.hello(conn, { uid: 'g' + g, name: msg.name || 'Гость' }, { create: !!msg.create, code: r.code, diff: msg.diff, dice: msg.dice });
       } else r.core.message(conn, msg);
     }
   });

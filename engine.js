@@ -202,11 +202,26 @@ function newGame(opt) {
 
 /* ---------- главная функция ---------- */
 const actorId = s => s.phase === 'exit' ? s.exitPid : s.cur;
+// действие приходит и от чужого клиента: пропускаем только поля нужного вида
+const INT_F = ['i', 'li', 'n', 'qty', 'pid', 'target', 'loan'], ID_F = ['id', 'sell', 'aid'], STR_F = ['type', 'tk', 'k', 'opt', 'skill', 'side', 'lkind'];
+function cleanAction(a) {
+  if (!a || typeof a !== 'object') return null;
+  const o = {};
+  for (const f of INT_F) if (a[f] != null) { const v = Number(a[f]); if (!Number.isFinite(v) || Math.abs(v) > 1e9) return null; o[f] = Math.trunc(v); }
+  for (const f of ID_F) if (a[f] != null) { if (typeof a[f] !== 'number' && typeof a[f] !== 'string') return null; o[f] = a[f]; }
+  for (const f of STR_F) if (a[f] != null) { if (typeof a[f] !== 'string' || a[f].length > 24) return null; o[f] = a[f]; }
+  if (o.tk != null && !Object.prototype.hasOwnProperty.call(D.TICK, o.tk)) return null;
+  if (a.up != null) o.up = !!a.up;
+  if (a._bot) o._bot = true;
+  return o;
+}
 function act(state, a) {
+  a = cleanAction(a);
+  if (!a || !a.type) return { ok: false, state, events: [{ t: 'error', pid: a && a.pid, text: 'Неизвестное действие' }] };
   const s = JSON.parse(JSON.stringify(state));
   const ev = [];
   try { handle(s, a, ev); }
-  catch (e) { if (e instanceof RuleError) return { ok: false, state, events: [{ t: 'error', pid: a.pid, text: e.message }] }; throw e; }
+  catch (e) { return { ok: false, state, events: [{ t: 'error', pid: a.pid, text: e instanceof RuleError ? e.message : 'Неизвестное действие' }] }; }
   return { ok: true, state: s, events: ev };
 }
 
