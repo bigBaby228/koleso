@@ -637,7 +637,7 @@ function repayBox(me) {
 const loanName = l => l.shady ? 'Коллекторы' : l.kind === 'cash' ? 'Потребкредит' : l.kind === 'edu' ? 'Кредит за учёбу' : l.kind === 'short' ? 'Микрозайм' : 'Кредит в банке';
 // сколько осталось у микрозайма: в ходах (1 ход = 1 месяц игры)
 const loanDue = (me, l) => { if (l.kind !== 'short' || l.due == null) return ''; const n = Math.max(0, l.due - me.turns); return n ? `вернуть через ${n} ${n === 1 ? 'ход' : n < 5 ? 'хода' : 'ходов'}` : 'вернуть в этот ход'; };
-const loanHint = l => l.shady ? 'гаси первым' : l.kind === 'short' ? 'фиксированная ставка' : l.kind === 'cash' ? 'самый дорогой' : l.kind === 'edu' ? '' : 'ставка плавает с экономикой';
+const loanHint = l => l.shady ? 'гаси первым' : l.kind === 'short' ? (l.missed ? `просрочен ${l.missed} раз` : 'просрочка — ставка +40%') : l.kind === 'cash' ? 'самый дорогой' : l.kind === 'edu' ? '' : 'ставка плавает с экономикой';
 let repayLi = null;
 function renderReport() {
   const me = S.players[ME];
@@ -894,7 +894,7 @@ function advice(me) {
   const due = me.loans.filter(l => l.kind === 'short' && l.due - me.turns <= 2).sort((a, b) => a.due - b.due)[0];
   const shady = me.loans.find(l => l.shady), cash = me.loans.filter(l => l.kind === 'cash').reduce((t, l) => t + l.amt * l.rate, 0);
   if (f < 0) return `Поток в минусе: −${money(-f)} каждый месяц. Погаси дорогой кредит или продай убыточный бизнес.`;
-  if (due) { const n = Math.max(0, due.due - me.turns); return `Через ${n} ${n === 1 ? 'ход' : 'хода'} вернуть микрозайм ${money(due.amt)}. Держи деньги, иначе перекредитуют дороже.`; }
+  if (due) { const n = Math.max(0, due.due - me.turns); return `Через ${n} ${n === 1 ? 'ход' : 'хода'} вернуть микрозайм ${money(due.amt)}. Не вернёшь — ставка вырастет на 40%.`; }
   if (shady) return `Долг коллекторам под ${pct(shady.rate)} в месяц. Гаси его первым (Отчёт → Банк).`;
   if (cash > 0 && me.cash > 2000) return `Потребкредит съедает ${money(cash)}/мес. Погаси его, деньги есть.`;
   if (me.mode === 'rat') {
@@ -975,7 +975,7 @@ function cardHTML(c) {
         const rivals = au.bids.map(b => S.players[b.pid].name).join(' и ');
         return head + rows + `<div class="verdict"><div class="vt y">Торги</div>${rivals} тоже хотят эту сделку.<br>
           Ставка: <b>${money(au.price)}</b>${leader ? ` · лидер: <b>${leader}</b>` : ''}</div>
-          <div class="btns">${btn(au.leader == null ? `Беру за ${money(next)}` : `Ставлю ${money(next)}`, "UI.A('bid')", 'warn')}${btn('Пас', "UI.A('pass')", 'sec')}</div>
+          <div class="btns">${C.canAfford(S, me, next) ? btn(au.leader == null ? `Беру за ${money(next)}` : `Ставлю ${money(next)}`, "UI.A('bid')", 'warn') : btn(`Ставка ${money(next)} не по карману<small>своих нужно хотя бы ${money(next - C.maxDealLoan(S, me, { down: next }))}, у тебя ${money(me.cash)}</small>`, '', '', true)}${btn('Пас', "UI.A('pass')", 'sec')}</div>
           ${qh('Шаг торгов +10% к взносу. Выиграешь — заплатишь свою ставку как взнос. Спасуешь — сделку заберёт соперник.', 'Как идут торги')}`;
       }
       const fog = !ana && d.est != null ? `<div class="hint">Реальный доход может быть от ${money(Math.round(d.est * D.RULES.fog[0] / 10) * 10)} до ${money(Math.round(d.est * D.RULES.fog[1] / 10) * 10)}. Точно покажет «Бизнес-аналитика».</div>` : '';
@@ -992,7 +992,7 @@ function cardHTML(c) {
         ${c.alt && (!au || !au.log.length) ? btn(`Другой вариант: ${c.alt.e || ''} ${c.alt.n}`, "UI.A('swap')", 'sec') : ''}
         ${btn('Отказаться', "UI.A('pass')", 'sec')}
       </div>
-      ${qh(`Банк даёт не больше ${ltv}% взноса${S.cycle && D.CYCLE[S.cycle.i].tight ? ' (кризис)' : ''}, остальное — свои деньги. За свои целиком — скидка ${Math.round((1 - D.RULES.cashDisc) * 100)}%. Микрозайм — фиксированная ставка, но вернуть надо через ${D.RULES.shortTerm} ходов, иначе перекредитуют дороже. Кредит в банке — без срока, но ставка плавающая: в кризис платёж вырастет.`, 'Как купить')}`;
+      ${qh(`Банк даёт не больше ${ltv}% взноса${S.cycle && D.CYCLE[S.cycle.i].tight ? ' (кризис)' : ''}, остальное — свои деньги. За свои целиком — скидка ${Math.round((1 - D.RULES.cashDisc) * 100)}%. Микрозайм — фиксированная ставка, но вернуть надо через ${D.RULES.shortTerm} ходов: за каждую просрочку ставка растёт на 40%. Кредит в банке — без срока, но ставка плавающая: в кризис платёж вырастет.`, 'Как купить')}`;
     }
     case 'dilemma': {
       const dl = (c.mid ? D.MDILEMMAS : D.DILEMMAS)[c.di], as = me.assets.find(x => x.id === c.aid);
@@ -1344,7 +1344,7 @@ window.UI = {
 initTg();
 applyTheme(wallet().theme);
 // самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
-const APP_V = '0.17';
+const APP_V = '0.17.1';
 if (location.protocol.startsWith('http')) try {
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
     if (!j || !j.v || j.v === APP_V) return;

@@ -107,6 +107,12 @@ const seen = (p, d) => (has(p, 'analytics') || d.est == null ? d.flow : d.est); 
 const ltvOf = (s, p) => (phase(s).tight ? R.ltvCrisis : R.ltv) + (has(p, 'credit') ? R.ltvCredit : 0) - (p.free && p.mode === 'rat' ? R.ltvFree : 0);
 const maxDealLoan = (s, p, d) => Math.floor(d.down * ltvOf(s, p) / 100) * 100;
 const cashPrice = d => r100(d.down * R.cashDisc);
+// хватит ли денег купить по такой цене: своими или своя доля + кредит, который банк реально даст
+function canAfford(s, p, price) {
+  if (p.cash >= r100(price * R.cashDisc)) return true;
+  const L = Math.ceil(Math.max(0, price - p.cash) / 100) * 100;
+  return L <= maxDealLoan(s, p, { down: price }) && canBorrow(s, p, L);
+}
 const yieldK = s => R.yieldSpread[0] + rnd(s) * (R.yieldSpread[1] - R.yieldSpread[0]);
 const perk = (p, k) => !!(p.perks && p.perks.includes(k));
 const thrift = (p, v) => perk(p, 'thrift') ? Math.round(v * 0.7 / 50) * 50 : v;
@@ -339,7 +345,9 @@ function handle(s, a, ev) {
     case 'bid': {
       need(s.phase === 'card' && myTurn && c && c.kind === 'deal' && c.auction && !c.auction.done, 'Торгов нет');
       const au = c.auction, step = x => r100(x * (1 + R.auctionStep));
-      au.price = au.leader == null ? au.price : step(au.price); au.leader = pid; au.log.push([pid, au.price]);
+      const next = au.leader == null ? au.price : step(au.price);
+      need(canAfford(s, p, next), `Не хватает денег на ставку ${money(next)}: своих нужно хотя бы ${money(next - maxDealLoan(s, p, { down: next }))}`);
+      au.price = next; au.leader = pid; au.log.push([pid, au.price]);
       for (let guard = 0; guard < 30; guard++) {
         const cands = au.bids.filter(b => b.pid !== au.leader && b.max >= step(au.price)).sort((x, y) => y.max - x.max);
         if (!cands.length) break;
@@ -482,8 +490,11 @@ function processDue(s, p, ev) {
   for (const l of p.loans.filter(x => x.kind === 'short' && p.turns >= x.due)) {
     if (p.cash >= l.amt) { p.cash -= l.amt; toast(ev, p.id, `Микрозайм ${money(l.amt)} закрыт`); l.amt = 0; continue; }
     if (!phase(s).tight || loadPremium(s, p) === 0) {
-      l.amt = Math.round(l.amt * (1 + R.refiFee)); l.rate = rateFor(s, p, 'short'); l.due = p.turns + R.shortTerm;
-      toast(ev, p.id, `Срок кредита: перекредитовался, ${money(l.amt)} под ${pct(l.rate)}`); continue;
+      // просрочка: МФО продлевает, но ставка растёт на 40% за каждый пропущенный срок
+      const old = l.rate; l.rate = Math.round(l.rate * R.lateK * 1000) / 1000; l.missed = (l.missed || 0) + 1; l.due = p.turns + R.shortTerm;
+      toast(ev, p.id, `⚠️ Микрозайм ${money(l.amt)} просрочен (${l.missed}-й раз): ставка ${pct(old)} → ${pct(l.rate)}. Новый срок — ${R.shortTerm} ходов`);
+      if (l.missed >= 2) sys(s, `🏦 ${p.name}: микрозайм просрочен ${l.missed} раза, ставка уже ${pct(l.rate)}`);
+      continue;
     }
     const amt = l.amt; l.amt = 0; p.loans = p.loans.filter(x => x.amt > 0);
     toast(ev, p.id, `Кризис: банк отказал в перекредитовании, верни ${money(amt)}`);
@@ -1270,6 +1281,9 @@ function botMove(s, pid, p) {
       const shady = p.loans.some(l => l.shady || l.kind === 'cash'), spare = p.cash - scaleCost(s, p, R.botReserve);
       if ((goal || shady) && spare >= 1000) return { type: 'repay', pid, n: Math.min(Math.floor(spare / 1000) * 1000, Math.ceil(loanTotal(p) / 1000) * 1000) };
     }
+    // микрозайм скоро возвращать — гасим, если есть деньги, чтобы ставка не выросла
+    { const li = p.loans.findIndex(l => l.kind === 'short' && l.due - p.turns <= 1 && p.cash >= l.amt);
+      if (li >= 0) return { type: 'repay', pid, n: p.loans[li].amt, li }; }
     // увольнение: цель круга требует уйти с работы; раньше — если все места заняты и запас есть
     if (p.mode === 'rat' && !p.free && p.salary > 0) {
       const pas = passive(s, p), ex = expenses(s, p);
@@ -1348,7 +1362,7 @@ function botMove(s, pid, p) {
 
 const KolesoEngine = {
   newGame, act, botAction, afkAction, actorId, D,
-  calc: { dreamProg, dreamDone, dreamCostOf, sectorLeader, secWeight, concentrated, midK, growCost, growAdd, hasDir, dirPay, midSlots, slotItems, slotsOf, fullOf, usedSlots, ratFull, occupies, slots, dreamPrice, seen, ltvOf, maxDealLoan, cashPrice, passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
+  calc: { canAfford, dreamProg, dreamDone, dreamCostOf, sectorLeader, secWeight, concentrated, midK, growCost, growAdd, hasDir, dirPay, midSlots, slotItems, slotsOf, fullOf, usedSlots, ratFull, occupies, slots, dreamPrice, seen, ltvOf, maxDealLoan, cashPrice, passive, expenses, cashflow, freedom, progress, fProgress, fTarget, canBorrow, maxLoan, loanTotal, loanPay, divOf, fee, feeFor, scaleCost,
           midF, midProgress, cap, has, rateFor, skillCost, debtFree, loadPremium,
           phase, secOf, cycK, assetIncome, managedIds, slots, sectorsCount, salePrice, isBiz, takeoverCost, takeoverFlow, influenceCost },
   fmt: { money, pct, fmtP },
