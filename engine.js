@@ -456,10 +456,13 @@ function handle(s, a, ev) {
     case 'repay': {
       const n = Math.floor(+a.n || 0); need(n > 0, 'Укажи сумму');
       need(loanTotal(p) > 0, 'Кредитов нет');
-      const nn = Math.min(n, loanTotal(p)); need(p.cash >= nn, 'Не хватает наличных');
+      const one = a.li != null ? p.loans[a.li] : null;
+      if (a.li != null) need(one && one.amt > 0, 'Такого долга уже нет');
+      const nn = Math.min(n, one ? one.amt : loanTotal(p)); need(p.cash >= nn, 'Не хватает наличных');
       let left = nn;
       const bankBefore = p.loans.filter(l => !l.shady).reduce((x, l) => x + l.amt, 0);
-      for (const l of [...p.loans].sort((x, y) => y.rate - x.rate)) { const x = Math.min(left, l.amt); l.amt -= x; left -= x; if (!left) break; }
+      // выбранный долг или, если не выбран, самые дорогие первыми
+      for (const l of one ? [one] : [...p.loans].sort((x, y) => y.rate - x.rate)) { const x = Math.min(left, l.amt); l.amt -= x; left -= x; if (!left) break; }
       p.cash -= nn - left; p.loans = p.loans.filter(l => l.amt > 0);
       const bankAfter = p.loans.filter(l => !l.shady).reduce((x, l) => x + l.amt, 0);
       if (bankBefore > bankAfter) { const k = bankAfter / bankBefore; p.assets.forEach(a => { if (a.loan) a.loan = Math.round(a.loan * k); }); }
@@ -477,14 +480,14 @@ function handle(s, a, ev) {
 /* ---------- ход ---------- */
 function processDue(s, p, ev) {
   for (const l of p.loans.filter(x => x.kind === 'short' && p.turns >= x.due)) {
-    if (p.cash >= l.amt) { p.cash -= l.amt; toast(ev, p.id, `Короткий кредит ${money(l.amt)} закрыт`); l.amt = 0; continue; }
+    if (p.cash >= l.amt) { p.cash -= l.amt; toast(ev, p.id, `Микрозайм ${money(l.amt)} закрыт`); l.amt = 0; continue; }
     if (!phase(s).tight || loadPremium(s, p) === 0) {
       l.amt = Math.round(l.amt * (1 + R.refiFee)); l.rate = rateFor(s, p, 'short'); l.due = p.turns + R.shortTerm;
       toast(ev, p.id, `Срок кредита: перекредитовался, ${money(l.amt)} под ${pct(l.rate)}`); continue;
     }
     const amt = l.amt; l.amt = 0; p.loans = p.loans.filter(x => x.amt > 0);
     toast(ev, p.id, `Кризис: банк отказал в перекредитовании, верни ${money(amt)}`);
-    sys(s, `🏦 ${p.name}: банк потребовал вернуть короткий кредит ${money(amt)}`);
+    sys(s, `🏦 ${p.name}: МФО потребовала вернуть микрозайм ${money(amt)}`);
     if (!pay(s, p, amt, ev)) return false;
   }
   p.loans = p.loans.filter(x => x.amt > 0);
@@ -840,7 +843,7 @@ function doBuy(s, p, a, ev) {
     p.cash -= cost;
     p.assets.push(Object.assign({}, d, { id: ++s.uid }, L ? { loan: L, loanRate: rate, lkind: lk } : {}, d.cat === 'mbiz' ? { lvl: 1, base: d.flow, down0: d.down } : {}));
     note(p, { k: 'buy', n: d.n, e: d.e, down: d.down, cost, flow: d.flow, est: d.est, L, pay: payL });
-    say(s, p.id, `Купил(а) <b>${d.n}</b>${L ? ` в ${lk === 'short' ? 'короткий ' : ''}кредит ${money(L)}` : ' за свои'} +${money(d.flow)}/мес`);
+    say(s, p.id, `Купил(а) <b>${d.n}</b>${L ? (lk === 'short' ? ` в микрозайм ${money(L)}` : ` в кредит ${money(L)}`) : ' за свои'} +${money(d.flow)}/мес`);
     const surprise = d.est != null && !has(p, 'analytics') && Math.abs(d.flow - d.est) >= d.est * 0.1 ? (d.flow < d.est ? ` Доход оказался ниже обещанного (${money(d.est)}).` : ` Доход выше обещанного (${money(d.est)}).`) : '';
     if (L && payL > d.flow) toast(ev, p.id, `⚠️ ${d.n}: платёж банку ${money(payL)} больше дохода ${money(d.flow)}. Бизнес в минусе на ${money(payL - d.flow)}/мес.${surprise}`);
     else toast(ev, p.id, `${d.e} Куплено${L ? '' : ` со скидкой за ${money(cost)}`}! Поток +${money(d.flow)}${L ? `, платёж по кредиту ${money(payL)} → чистыми ${money(d.flow - payL)}` : ''}.${surprise}`);

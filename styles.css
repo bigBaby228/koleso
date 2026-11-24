@@ -1,7 +1,8 @@
 
 :root{
-  --bg:#17212b; --bg2:#232e3c; --bg3:#2b3848; --text:#f5f5f5; --hint:#7d8b99;
-  --link:#6ab3f3; --btn:#2ea6ff; --green:#4fd17b; --red:#ff5a5f; --gold:#f5c04a;
+  --bg:#121a22; --bg2:#1a242f; --bg3:#243140; --text:#f2efe8; --hint:#8b97a3;
+  --link:#e6bd62; --btn:#d6a547; --btntext:#1d1504; --green:#5fd38d; --red:#ff6464; --gold:#f0c35a;
+  --line:rgba(255,255,255,.08);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
@@ -528,3 +529,101 @@ body[class*="th-"] .mainbtn,body[class*="th-"] .b:not(.sec):not(.warn){color:var
 .strk-h{font-weight:800;font-size:13.5px;margin-bottom:6px}
 .strk-b{display:flex;gap:6px}.strk-b .b{flex:1;padding:9px 6px;font-size:12.5px}
 .tchat{max-width:84%;align-self:center}
+
+.b small{display:block;font-size:11.5px;font-weight:500;opacity:.75;margin-top:2px}
+.loanlist{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.loanpick{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;background:var(--bg3);border:1.5px solid transparent;border-radius:12px;padding:9px 11px;color:var(--text);font-size:13.5px;font-weight:700}
+.loanpick.on{border-color:var(--link);background:color-mix(in srgb,var(--link) 12%,var(--bg3))}
+.loanpick small{display:block;font-size:11px;font-weight:500;color:var(--hint);margin-top:2px}
+.lp-v{text-align:right;white-space:nowrap}.lp-v small{color:var(--red)}
+
+
+/* =====================================================================
+   Интерфейс 2.0: стиль частного клуба — кнопки как фишки, тонкие линии,
+   латунь вместо телеграм-синего. Работает поверх всех тем через переменные.
+   ===================================================================== */
+body,button,input{font-family:"Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{font-variant-numeric:tabular-nums;letter-spacing:-.005em}
+.th-terminal,.th-terminal button,.th-terminal input{letter-spacing:0}
+
+/* --- кнопки --- */
+.b{position:relative;padding:14px 16px;border-radius:14px;font-weight:700;font-size:15px;letter-spacing:.005em;color:var(--btntext,#fff);
+  background:var(--btn);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--btn) 78%,#fff) 0%,var(--btn) 48%,color-mix(in srgb,var(--btn) 80%,#000) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -2px 0 rgba(0,0,0,.22),0 8px 18px -10px color-mix(in srgb,var(--btn) 80%,transparent);
+  transition:transform .08s ease,box-shadow .08s ease,filter .15s ease,background-color .15s}
+.b:active:not(:disabled){transform:translateY(1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 0 rgba(0,0,0,.25),0 3px 8px -6px rgba(0,0,0,.6)}
+.b:disabled{filter:grayscale(.8);opacity:.42;box-shadow:none;cursor:default}
+.b.sec{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.b.sec:active:not(:disabled){background:rgba(255,255,255,.05);transform:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.b.warn{background:color-mix(in srgb,var(--gold) 13%,transparent);color:var(--gold);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gold) 50%,transparent)}
+.b.gold{background:linear-gradient(180deg,#ffe39a,#e0a830 55%,#b07a14);color:#241800;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -2px 0 rgba(0,0,0,.2),0 8px 20px -10px rgba(224,168,48,.9)}
+.b:focus-visible,.sbtn:focus-visible,.tab:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.b .ic{font-size:16px;margin-right:4px}
+.b.online{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--link) 55%,transparent);color:var(--link)}
+.btns{gap:9px}
+.sbtn{background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);border-radius:12px;padding:10px;font-weight:600;color:var(--text)}
+.sbtn:active:not(:disabled){background:rgba(255,255,255,.05)}
+.sellmini{border-radius:8px;font-weight:600}
+.testlink{font-weight:500}
+
+/* --- нижняя кнопка: плавающая, а не полоса во всю ширину --- */
+.mainbtn{margin:6px 12px calc(10px + env(safe-area-inset-bottom));border-radius:16px;padding:15px;font-size:16px;font-weight:700;color:var(--btntext,#fff);
+  background:var(--btn);background:linear-gradient(180deg,color-mix(in srgb,var(--btn) 78%,#fff) 0%,var(--btn) 48%,color-mix(in srgb,var(--btn) 80%,#000) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -2px 0 rgba(0,0,0,.22),0 10px 22px -12px color-mix(in srgb,var(--btn) 85%,transparent)}
+.mainbtn:active:not(:disabled){transform:translateY(1px)}
+.mainbtn:disabled{background:transparent!important;color:var(--hint)!important;box-shadow:inset 0 0 0 1px var(--line)!important;font-weight:600}
+body[class*="th-"] .mid .mainbtn,body[class*="th-"] .fast .mainbtn{background:linear-gradient(180deg,color-mix(in srgb,var(--btn) 78%,#fff) 0%,var(--btn) 48%,color-mix(in srgb,var(--btn) 80%,#000) 100%)}
+
+/* --- подписи обычным регистром --- */
+.lbl{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--hint);margin:14px 2px 8px}
+.card h3{text-transform:none;letter-spacing:0;font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px}
+.kind{text-transform:none;letter-spacing:0;font-size:13px;font-weight:700}
+.lvlname{letter-spacing:3px}
+
+/* --- поверхности --- */
+.card{background:var(--bg2);border-radius:18px;padding:14px 16px;box-shadow:inset 0 0 0 1px var(--line)}
+.rows{background:transparent;padding:0;border-radius:0;margin-bottom:12px;border-top:1px solid var(--line)}
+.rows .ln{padding:9px 2px;border-bottom:1px solid var(--line)}
+.ln .s{color:var(--hint)}
+.sheet{background:var(--bg2);border-radius:24px 24px 0 0;box-shadow:0 -16px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07);padding:8px 18px calc(18px + env(safe-area-inset-bottom))}
+.sheet .grab{width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:4px auto 10px}
+.sh-t{font-size:21px;font-weight:800;letter-spacing:-.01em}
+.hint{border-radius:12px}
+
+/* --- переключатели --- */
+.seg{background:rgba(0,0,0,.22);box-shadow:inset 0 1px 2px rgba(0,0,0,.35);border-radius:14px;padding:4px}
+.seg button{border-radius:10px;padding:9px 0;font-weight:600;transition:background .15s,color .15s}
+.seg button.on{background:var(--bg3);color:var(--text);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 2px 6px rgba(0,0,0,.3)}
+.qty button{background:transparent;border:0;box-shadow:inset 0 0 0 1px var(--line);border-radius:12px}
+.qty button.on{box-shadow:inset 0 0 0 1.5px var(--link);color:var(--link)}
+
+/* --- вкладки --- */
+.tabs{background:var(--bg2);border-top:0;box-shadow:0 1px 0 var(--line)}
+.tab{border-bottom:0;font-weight:600}
+.tab.on{color:var(--text)}
+.tab.on::after{content:'';position:absolute;left:50%;bottom:0;width:26px;height:3px;border-radius:3px 3px 0 0;background:var(--link);transform:translateX(-50%)}
+
+/* --- профессии и стартовый экран --- */
+.prof{background:var(--bg2);box-shadow:inset 0 0 0 1px var(--line);border:0;border-radius:16px}
+.prof:hover,.prof:active{box-shadow:inset 0 0 0 1.5px var(--link)}
+.start h1{font-size:30px;font-weight:800;letter-spacing:-.02em}
+.startbtns .b{padding:12px}
+.theme{box-shadow:inset 0 0 0 1px var(--line);border:0}
+.theme.on{box-shadow:inset 0 0 0 1.5px var(--gold)}
+.loanpick{background:transparent;box-shadow:inset 0 0 0 1px var(--line);border:0}
+.loanpick.on{box-shadow:inset 0 0 0 1.5px var(--link);background:color-mix(in srgb,var(--link) 9%,transparent)}
+.repay input,.joinrow input{background:rgba(0,0,0,.22);border:0;box-shadow:inset 0 0 0 1px var(--line);border-radius:12px;padding:10px 12px}
+.lseat{box-shadow:inset 0 0 0 1px var(--line)}
+.lprof{box-shadow:inset 0 0 0 1px var(--line);border:0}
+.lprof.on{box-shadow:inset 0 0 0 1.5px var(--gold)}
+
+/* светлая тема: линии тёмные */
+.th-paper{--line:rgba(0,0,0,.12)}
+.th-paper .b.sec,.th-paper .sbtn{box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);color:var(--text)}
+.th-paper .seg{background:rgba(0,0,0,.06);box-shadow:inset 0 1px 2px rgba(0,0,0,.12)}
+.th-paper .sheet .grab{background:rgba(0,0,0,.18)}
+@media (prefers-reduced-motion:reduce){.b,.mainbtn,.seg button{transition:none}}
+.repay input::-webkit-outer-spin-button,.repay input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.repay input{-moz-appearance:textfield}
+.th-paper .toast{background:#fffaf0;color:#2b2520;border-color:rgba(0,0,0,.12);box-shadow:0 6px 20px rgba(60,40,10,.2)}
