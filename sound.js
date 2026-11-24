@@ -28,15 +28,22 @@
     musicGain.gain.setTargetAtTime(vol.music * 0.22, ctx.currentTime, 0.2);
   }
   // первое касание открывает звук (требование iOS и Chrome)
+  // iOS: без этого Web Audio молчит при беззвучном режиме и в WebView Telegram
+  try { if (root.navigator && root.navigator.audioSession) root.navigator.audioSession.type = 'playback'; } catch (e) { /* старые браузеры */ }
+  let primed = false;
   function unlock() {
     if (!init()) return;
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state !== 'running') { const r = ctx.resume(); if (r && r.then) r.then(() => { if (wantMusic) startMusic(); }, () => {}); }
+    if (!primed) { // iOS открывает звук только после реально проигранного буфера внутри касания
+      try { const b = ctx.createBuffer(1, 1, 22050), src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(0); primed = true; } catch (e) { /* ignore */ }
+    }
     if (wantMusic) startMusic();
   }
-  ['pointerdown', 'touchstart', 'keydown'].forEach(ev => root.addEventListener && root.addEventListener(ev, unlock, { passive: true }));
+  // touchstart в iOS не считается «жестом пользователя» — ловим и touchend/click
+  ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown'].forEach(ev => root.addEventListener && root.addEventListener(ev, unlock, { passive: true, capture: true }));
   if (root.document) root.document.addEventListener('visibilitychange', () => {
     if (!ctx) return;
-    if (document.hidden) ctx.suspend(); else { ctx.resume(); if (wantMusic) startMusic(); }
+    if (document.hidden) ctx.suspend(); else { ctx.resume(); primed = false; if (wantMusic) startMusic(); }
   });
 
   /* ---------- кирпичики ---------- */
@@ -98,7 +105,8 @@
   };
   function play(name) {
     if (!vol.sfx || !SFX[name]) return;
-    if (!init() || ctx.state !== 'running') return;
+    if (!init()) return;
+    if (ctx.state !== 'running') { const r = ctx.resume(); if (r && r.catch) r.catch(() => {}); if (ctx.state !== 'running') return; }
     try { SFX[name](ctx.currentTime + 0.01); } catch (e) { /* звук — не критично */ }
   }
 
