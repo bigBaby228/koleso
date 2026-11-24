@@ -49,8 +49,8 @@ export class RoomCore {
   online() { return new Set(this.io.conns().map(c => this.io.uidOf(c)).filter(Boolean)); }
   lobbyMsg() {
     const on = this.online();
-    return { t: 'lobby', code: this.d.code, host: this.d.host, diff: this.d.diff,
-      seats: this.d.seats.map(x => ({ uid: x.uid, name: x.name, bot: !!x.bot, online: !!x.bot || on.has(x.uid) })) };
+    return { t: 'lobby', code: this.d.code, host: this.d.host, diff: this.d.diff, profMode: this.d.profMode || 'random',
+      seats: this.d.seats.map(x => ({ uid: x.uid, name: x.name, bot: !!x.bot, online: !!x.bot || on.has(x.uid), prof: x.prof || null })) };
   }
   seatOf(uid) { return this.d.state ? this.d.state.players.findIndex(p => p.uid === uid) : -1; }
   gameMsg(uid, extra) {
@@ -109,6 +109,15 @@ export class RoomCore {
       case 'diff':
         if (st || !isHost) return;
         this.d.diff = D_DIFF(m.k); this.save(); return this.all(this.lobbyMsg());
+      case 'profMode':
+        if (st || !isHost) return;
+        this.d.profMode = m.k === 'pick' ? 'pick' : 'random'; this.save(); return this.all(this.lobbyMsg());
+      case 'prof': {
+        if (st) return;
+        const x = this.d.seats.find(y => y.uid === uid);
+        if (!x || !E.D.PROFS.some(p => p.id === m.id)) return;
+        x.prof = m.id; this.save(); return this.all(this.lobbyMsg());
+      }
       case 'leave': {
         if (st) return;
         const i = this.d.seats.findIndex(x => x.uid === uid);
@@ -120,7 +129,7 @@ export class RoomCore {
       case 'start': {
         if (st || !isHost) return;
         if (!this.d.seats.length) return err('Нет игроков');
-        this.d.state = E.newGame({ diff: this.d.diff, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) | 0, seats: this.d.seats.map(x => ({ uid: x.uid, name: x.name, bot: x.bot, dice: x.dice })) });
+        this.d.state = E.newGame({ diff: this.d.diff, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) | 0, seats: this.d.seats.map(x => ({ uid: x.uid, name: x.name, bot: x.bot, dice: x.dice, prof: this.d.profMode === 'pick' && !x.bot ? x.prof : null })) });
         this.d.afk = {};
         this.schedule(); this.save();
         return this.broadcastGame();

@@ -42,7 +42,7 @@ const ICON = {
 const CELL_ICON = {
   pay: 'coin', mpay: 'coin', fpay: 'coin', small: 'home', sbiz: 'shop', big: 'tower', market: 'chart', tempt: 'bag',
   gamble: 'dice', charity: 'heart', child: 'stroller', down: 'exit', gig: 'wrench', course: 'cap',
-  mbiz: 'factory', mevent: 'bolt', lux: 'gem', expand: 'expand', hire: 'expand',
+  mbiz: 'factory', mevent: 'bolt', lux: 'gem', expand: 'expand', hire: 'expand', strike: 'bolt',
   invest: 'case', startup: 'rocket', dream: 'star', lawsuit: 'scales', tax: 'taxdoc', divorce: 'broken', crisis: 'storm',
   acq: 'buyout', ipo: 'bell', media: 'tv', raid: 'mask', sanctions: 'ban', crash: 'crash',
 };
@@ -103,6 +103,7 @@ function build(el, o) {
       <div class="cyc" id="cyc"></div>
       <div class="dice" id="dice"></div>
       <div class="lastmsg" id="lastMsg"></div>
+      <div class="tchat" id="tchat"></div>
     </div>
     <div class="seats" id="seats"></div>
     <div class="ttoks" id="ttoks"></div>`;
@@ -136,7 +137,7 @@ function seats(list) {
   host.querySelector('#seats').innerHTML = list.map((p, i) => {
     const stack = Math.max(1, Math.min(6, Math.round(Math.log10(Math.max(10, p.cash)) - 1)));
     const chips = Array.from({ length: stack }, (_, k) => `<i style="bottom:${k * 3}px"></i>`).join('');
-    return `<div class="seat s-${SEAT_POS[i]} ${p.active ? 'active' : ''} ${p.out ? 'out' : ''}" style="--pc:${p.color}">
+    return `<div class="seat s-${SEAT_POS[i]} ${p.active ? 'active' : ''} ${p.out ? 'out' : ''}" style="--pc:${p.color}" data-pid="${p.pid}">
       <div class="ava2">${p.emoji}${p.badge ? `<span class="sbadge">${p.badge}</span>` : ''}</div>
       <div class="sname">${p.name}</div>
       <div class="scash">${p.cashTxt}</div>

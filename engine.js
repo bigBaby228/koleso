@@ -271,6 +271,17 @@ function handle(s, a, ev) {
       p.cash -= np; c.done = true;
       return win(s, p, 'dream');
     }
+    case 'strike': {
+      need(s.phase === 'card' && myTurn && c && c.kind === 'strike', 'Сейчас не по кому бить');
+      const q = s.players[a.target]; need(q && c.targets.includes(q.id) && !q.bankrupt && q.mode === 'fast', 'Бить можно только соперников в Большой игре');
+      need(!(q.shield > q.turns), `${q.name} под защитой юристов ещё ${q.shield - q.turns} ход.`);
+      const k = a.k === 'audit' ? 'audit' : 'press', cost = c[k]; need(p.cash >= cost, `Нужно ${money(cost)}`);
+      p.cash -= cost; q.shield = q.turns + R.strikeShield;
+      if (k === 'press') { const cut = r100(q.fflow * R.strikePress); q.fflow -= cut; sys(s, `🎯 ${p.name} → ${q.name}: компромат в СМИ, поток −${money(cut)}`); }
+      else { q.skipPay = 1; sys(s, `🎯 ${p.name} → ${q.name}: налоговая проверка, следующая выплата заморожена`); }
+      st(p).strike = (st(p).strike || 0) + 1;
+      return finishCard(s, p, ev);
+    }
     case 'dreamSwitch': {
       need(p.mode === 'fast' && s.phase === 'roll' && myTurn, 'Сменить мечту можно в Большой игре, в свой ход');
       need(!(p.dp && p.dp.switched), 'Мечту можно сменить только один раз');
@@ -371,8 +382,7 @@ function handle(s, a, ev) {
       const qty = Math.floor(+a.qty || 0); need(qty > 0, 'Укажи количество');
       const total = qty * c.price, f = feeFor(c.tk, total);
       need(total + f <= p.cash, 'Не хватает денег');
-      p.cash -= total + f; addShares(s, p, c.tk, qty, c.price);
-      say(s, pid, `Взял(а) у брокера ${qty} ${c.tk} по ${fmtP(c.price)}`);
+      p.cash -= total + f; addShares(s, p, c.tk, qty, c.price);  // сделки с акциями не публикуются: соперники не должны знать, кто в какой бумаге
       return finishCard(s, p, ev);
     }
     case 'sell': {
@@ -497,14 +507,15 @@ function doRoll(s, p, ev) {
   for (let i = 0; i < n; i++) {
     p.pos = (p.pos + 1) % cells.length;
     if (cells[p.pos] === 'pay' || cells[p.pos] === 'mpay') { if (!payday(s, p, ev)) return afterBankrupt(s, p); }
-    if (cells[p.pos] === 'fpay') p.cash += p.fflow;
+    if (cells[p.pos] === 'fpay') { if (p.skipPay) { p.skipPay = 0; toast(ev, p.id, '🧾 Налоговая проверка: дивиденды заморожены'); } else p.cash += p.fflow; }
   }
   return p.mode === 'fast' ? resolveFast(s, p, ev) : p.mode === 'mid' ? resolveMid(s, p, ev) : resolve(s, p, ev);
 }
 
 function payday(s, p, ev) {
   const f = cashflow(s, p);
-  if (f >= 0) p.cash += f; else if (!pay(s, p, -f, ev)) return false;
+  if (p.skipPay && f > 0) { p.skipPay = 0; toast(ev, p.id, '🧾 Налоговая проверка: эта выплата заморожена'); }
+  else if (f >= 0) p.cash += f; else if (!pay(s, p, -f, ev)) return false;
   for (const a of p.assets.filter(x => x.risk)) {
     if (rnd(s) < a.risk * R.riskK * diff(s).risk * (has(p, 'risk') ? 0.5 : 1) * (sectorsCount(p) >= R.diversifySectors ? R.diversifyRisk : 1)) {
       p.assets = p.assets.filter(x => x !== a);
@@ -736,6 +747,7 @@ function resolveMarket(s, p, ev) {
   s.card = card; s.phase = 'card';
 }
 
+function strikeCost(p, k) { const f = Math.max(0, p.fflow || 0); return k === 'press' ? Math.max(30000, r1000(f * R.strikePressCost)) : Math.max(20000, r1000(f * R.strikeAuditCost)); }
 function charityFast(p) {
   const opts = [R.charityFast, 0.5, 1].map(k => Math.max(1000, r1000(p.fflow * k)));
   return { kind: 'charity', cost: opts[0], opts, fund: D.DREAMS[p.dream].path === 'fund' };
@@ -750,6 +762,11 @@ function resolveFast(s, p, ev) {
     s.card = { kind: 'venture', v: pick(s, D.VENTURE), cost: r1000(U * (0.3 + rnd(s) * 0.5)), result: null };
   } else if (t === 'charity') {
     s.card = charityFast(p);
+  } else if (t === 'strike') {
+    // бьём только тех, кто тоже в Большой игре: первый и средний круг не трогаем
+    const targets = s.players.filter(q => q.id !== p.id && !q.bankrupt && q.mode === 'fast').map(q => q.id);
+    if (!targets.length) { toast(ev, p.id, '🎯 В Большой игре ты пока один — бить некого'); return endTurn(s, p, ev); }
+    s.card = { kind: 'strike', targets, press: strikeCost(p, 'press'), audit: strikeCost(p, 'audit') };
   } else if (t === 'dream') {
     const path = D.DREAMS[p.dream].path;
     if (path === 'buy') s.card = { kind: 'dream', di: p.dream, cost: R.yachtPrice };
@@ -875,16 +892,14 @@ function doTrade(s, p, a, ev) {
   const own = p.assets.find(x => x.tk === a.tk);
   if (a.side === 'buy') {
     need(total + f <= p.cash, 'Не хватает денег');
-    p.cash -= total + f; addShares(s, p, a.tk, qty, q.p);
-    say(s, p.id, `Купил(а) ${qty} ${a.tk} по ${fmtP(q.p)}`);
+    p.cash -= total + f; addShares(s, p, a.tk, qty, q.p);  // сделки с акциями не публикуются: соперники не должны знать, кто в какой бумаге
   } else {
     need(own && own.shares >= qty, 'Столько акций нет');
     p.cash += total - f; own.shares -= qty;
     const pl = (q.p - own.buy) * qty;
     if (pl > 0) st(p).sp = (st(p).sp || 0) + pl;
     if (D.TICK[a.tk].crypto && own.buy > 0 && q.p / own.buy >= 10) st(p).hmk = true;
-    if (!own.shares) p.assets = p.assets.filter(x => x !== own);
-    say(s, p.id, `Продал(а) ${qty} ${a.tk} по ${fmtP(q.p)} (${pl >= 0 ? '+' : ''}${money(pl)})`);
+    if (!own.shares) p.assets = p.assets.filter(x => x !== own);  // сделки с акциями не публикуются: соперники не должны знать, кто в какой бумаге
   }
 }
 function doTakeover(s, p, tk, cost, flow) {
@@ -1015,6 +1030,9 @@ function endTurn(s, p, ev) {
     }
   }
   if (p.mode === 'fast' && p.fflow >= fTarget(p)) return win(s, p, 'flow');
+  if (p.mode === 'fast' && !p.finAnn && fProgress(s, p) >= R.finishLine * 100) {
+    p.finAnn = true; sys(s, `🔥 ${p.name} на финишной прямой: ${fProgress(s, p)}% до победы. Самое время для удара!`);
+  }
   if (p.mode === 'fast' && p.dp) {
     if (D.DREAMS[p.dream].path === 'tour') p.dp.streak = p.fflow >= R.tourFlow && !p.loans.length ? (p.dp.streak || 0) + 1 : 0;
     if (dreamDone(s, p)) return win(s, p, 'dream');
@@ -1300,6 +1318,12 @@ function botMove(s, pid, p) {
       const i = c.opts.map((d, k) => [pref.indexOf(d.id), k]).sort((a, b) => a[0] - b[0])[0][1], d = c.opts[i];
       const ok = room && cashflow(s, p) > d.pay * 3 && (d.id !== 'ops' || fullOf(p)) && (d.id !== 'mkt' || p.assets.some(a => a.cat === 'mbiz' && secOf(a) === d.sec));
       return ok ? { type: 'hire', pid, i } : { type: 'pass', pid };
+    }
+    case 'strike': {
+      const tg = c.targets.map(i => s.players[i]).filter(q => !(q.shield > q.turns)).sort((x, y) => progress(s, y) - progress(s, x))[0];
+      if (!tg || progress(s, tg) < Math.max(50, progress(s, p))) return { type: 'pass', pid };
+      const k = rnd(s) < 0.6 ? 'press' : 'audit';
+      return p.cash >= c[k] * 2 ? { type: 'strike', pid, target: tg.id, k } : { type: 'pass', pid };
     }
     case 'island': {
       const np = Math.round(c.price * (1 + R.islandStep) / 1000) * 1000;

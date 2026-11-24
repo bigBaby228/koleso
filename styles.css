@@ -467,3 +467,64 @@ body[class*="th-"] .mainbtn,body[class*="th-"] .b:not(.sec):not(.warn){color:var
 .sellmini.grow{background:#2f7d55;color:#fff;margin-top:3px}
 .sellmini.grow:disabled{opacity:.45}
 .auclog{font-size:12px;color:var(--hint);margin:6px 0;max-height:90px;overflow-y:auto;text-align:center}
+
+/* --- Море --- */
+.th-sea{--bg:#06222e;--bg2:#0b3140;--bg3:#124557;--text:#e8fbff;--hint:#86b8c4;--link:#5fe0e0;--btn:#1fa8a8;--green:#5fe3a1;--red:#ff7b6b;--gold:#f2c48a}
+.th-sea .room{background:repeating-linear-gradient(90deg,#6b4a2b 0 26px,#5a3d22 26px 28px) !important}
+.th-sea .ttable{background:linear-gradient(135deg,#d9b88a,#a5794a) !important;box-shadow:0 12px 28px rgba(0,0,0,.55) !important}
+.th-sea .felt{background:radial-gradient(ellipse 60% 22% at 30% 30%,rgba(255,255,255,.12),transparent 70%),repeating-radial-gradient(ellipse at 50% 120%,rgba(255,255,255,.07) 0 3px,transparent 3px 16px),radial-gradient(ellipse at 50% 40%,#2ec4c4,#0a6c7a 80%) !important;box-shadow:inset 0 0 30px rgba(0,40,60,.5) !important;outline:none !important}
+.th-sea .tcenter{color:#e8fbff !important}
+/* --- Уолл-стрит --- */
+.th-wallst{--bg:#08130e;--bg2:#0f2018;--bg3:#173326;--text:#e6f5ec;--hint:#86a596;--link:#3ecf6e;--btn:#1f8a4c;--green:#3ecf6e;--red:#ff5a5a;--gold:#e8c25a}
+.th-wallst .room{background:repeating-linear-gradient(0deg,rgba(62,207,110,.05) 0 1px,transparent 1px 22px),linear-gradient(#0f2018,#060d09) !important}
+.th-wallst .ttable{background:linear-gradient(135deg,#8a3d22,#4e1f10 60%,#7a3219) !important;box-shadow:0 12px 30px rgba(0,0,0,.7) !important}
+.th-wallst .felt{background:repeating-linear-gradient(0deg,transparent 0 17px,rgba(62,207,110,.08) 17px 18px),radial-gradient(ellipse at 50% 40%,#16432b,#0a2416 80%) !important;box-shadow:inset 0 0 36px rgba(0,0,0,.6) !important;outline:1px solid rgba(232,194,90,.3) !important;outline-offset:-7px}
+.th-wallst .tcenter{color:#c9f2d7 !important}
+/* --- Днепр 90-х --- */
+.th-dnepr{--bg:#1a060c;--bg2:#2a0a14;--bg3:#3e0f1e;--text:#ffe9ef;--hint:#c48b9b;--link:#ff4f8b;--btn:#c2185b;--green:#7fd18f;--red:#ff5a5a;--gold:#e8c25a}
+.th-dnepr .room{background:radial-gradient(ellipse at 50% 0%,rgba(194,24,91,.25),transparent 60%),repeating-linear-gradient(45deg,#160509 0 6px,#1d070d 6px 12px) !important}
+.th-dnepr .ttable{background:repeating-linear-gradient(90deg,#f5dc84 0 6px,#a87818 6px 9px,#e8c25a 9px 14px) !important;box-shadow:0 0 22px rgba(232,194,90,.35),0 12px 28px rgba(0,0,0,.8) !important}
+.th-dnepr .felt{background:radial-gradient(ellipse at 50% 35%,rgba(255,255,255,.08),transparent 60%),radial-gradient(ellipse at 50% 45%,#8e0f3e,#3e0619 80%) !important;box-shadow:inset 0 0 40px rgba(0,0,0,.55) !important;outline:none !important}
+.th-dnepr .tcenter{color:#f5dc84 !important}
+/* --- Космос --- */
+.th-cosmos{--bg:#05040f;--bg2:#0e0b22;--bg3:#1a1540;--text:#ecebff;--hint:#8f8cc0;--link:#38c8ff;--btn:#6a4cff;--green:#5ff0b0;--red:#ff6b81;--gold:#ffd27a}
+.th-cosmos .room{background:radial-gradient(circle,#fff 0 1px,transparent 1.5px) 0 0/43px 47px,radial-gradient(circle,rgba(255,255,255,.6) 0 1px,transparent 1.5px) 20px 25px/31px 29px,radial-gradient(ellipse at 70% 20%,#1d1450,#05040f 70%) !important}
+.th-cosmos .ttable{background:#0b0920 !important;box-shadow:0 0 0 2px rgba(124,92,255,.8),0 0 0 7px rgba(56,200,255,.12),0 0 30px rgba(124,92,255,.45) !important}
+.th-cosmos .felt{background:radial-gradient(circle,#fff 0 .8px,transparent 1.3px) 0 0/23px 27px,radial-gradient(ellipse at 35% 40%,rgba(124,92,255,.7),transparent 55%),radial-gradient(ellipse at 65% 60%,rgba(56,200,255,.45),transparent 55%),#0a0820 !important;box-shadow:inset 0 0 40px rgba(0,0,0,.7) !important;outline:none !important}
+.th-cosmos .tcenter{color:#dfe0ff !important}
+/* --- Вегас --- */
+.th-vegas{--bg:#14060a;--bg2:#240a12;--bg3:#3a1220;--text:#fff0e6;--hint:#c49a8f;--link:#ffcf5a;--btn:#d62839;--green:#5fe08a;--red:#ff6b6b;--gold:#ffcf5a}
+.th-vegas .room{background:radial-gradient(ellipse at 50% 50%,#5a0f1c,#1a0508 75%) !important}
+.th-vegas .ttable{background:radial-gradient(circle,#fff7c2 0 2px,transparent 3px) 0 0/16px 16px,linear-gradient(135deg,#6b0f1a,#2e0509) !important;box-shadow:0 0 18px rgba(255,207,90,.35),0 12px 28px rgba(0,0,0,.8) !important}
+.th-vegas .felt{background:radial-gradient(ellipse at 50% 40%,#22995a,#0d4a2a 80%) !important;box-shadow:inset 0 0 34px rgba(0,0,0,.5) !important;outline:1.5px solid rgba(255,207,90,.5) !important;outline-offset:-8px}
+.th-vegas .tcenter{color:#ffe9a8 !important}
+/* --- новые кубики --- */
+.dice.sk-pearl .die{background:linear-gradient(135deg,#fffaf3,#f3dfe6 40%,#dfeaf7 70%,#fff2df);box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 0 6px #fff}
+.dice.sk-pearl .die span.p::after{background:#8a6f7d}
+.dice.sk-dollar .die{background:repeating-linear-gradient(135deg,#a9d39b 0 3px,#9ccb8d 3px 6px);box-shadow:0 3px 7px rgba(0,0,0,.4),inset 0 0 0 2px #6a9c5a}
+.dice.sk-dollar .die span.p::after{background:#1f5a2a;box-shadow:0 0 0 1.5px #a9d39b,0 0 0 2.5px #1f5a2a}
+.dice.sk-raspberry .die{background:radial-gradient(circle at 30% 25%,#e04a85,#9c0f4a 70%);box-shadow:0 3px 8px rgba(120,0,40,.6)}
+.dice.sk-raspberry .die span.p::after{background:radial-gradient(circle at 35% 30%,#fff1b8,#e0b040 60%,#a87818)}
+.dice.sk-galaxy .die{background:radial-gradient(ellipse at 30% 30%,rgba(124,92,255,.9),transparent 60%),radial-gradient(ellipse at 70% 70%,rgba(56,200,255,.7),transparent 60%),#0a0820;box-shadow:0 0 10px rgba(124,92,255,.6)}
+.dice.sk-galaxy .die span.p::after{background:#fff;box-shadow:0 0 4px #fff,0 0 8px #9fd8ff}
+.dice.sk-lava .die{background:linear-gradient(140deg,transparent 46%,#ff6a00 48%,transparent 51%),linear-gradient(40deg,transparent 60%,#ff8c1a 62%,transparent 64%),#1b1412;box-shadow:0 0 10px rgba(255,106,0,.55)}
+.dice.sk-lava .die span.p::after{background:#ffb347;box-shadow:0 0 5px #ff6a00}
+
+/* чат на сукне и карточка игрока */
+.tchat{pointer-events:auto;cursor:pointer;margin-top:4px;width:100%;max-width:100%;display:flex;flex-direction:column;gap:1px}
+.tchat .tl{font-size:10.5px;line-height:1.25;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tchat .tl.sys{opacity:.6;font-style:italic}
+.tchat .tl b{font-weight:800}
+.seat{pointer-events:auto;cursor:pointer}
+.tcenter .lastmsg{min-height:0}
+
+.lprofs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:6px 0}
+.lprof{background:var(--bg2);border:1.5px solid transparent;border-radius:10px;color:var(--text);padding:7px 4px;font-size:11.5px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
+.lprof span{font-size:18px}.lprof small{color:var(--hint);font-weight:500}
+.lprof.on{border-color:var(--gold)}
+.lpr{display:block;font-size:11px;color:var(--hint);font-weight:500}
+
+.strk{background:var(--bg2);border-radius:12px;padding:8px 10px;margin:6px 0}
+.strk-h{font-weight:800;font-size:13.5px;margin-bottom:6px}
+.strk-b{display:flex;gap:6px}.strk-b .b{flex:1;padding:9px 6px;font-size:12.5px}
+.tchat{max-width:84%;align-self:center}

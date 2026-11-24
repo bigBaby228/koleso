@@ -411,7 +411,8 @@ function showLobby(wait) {
     if (!x) return `<div class="lseat empty"><span class="ldot"></span><span class="lname">Свободно</span>${host ? `<button class="lbtn" onclick="UI.addBot()">+ бот</button>` : ''}</div>`;
     const col = x.bot ? '#8a96a3' : D.HUMAN_COLORS[L.seats.slice(0, i).filter(y => !y.bot).length % 4];
     const tag = x.uid === L.host ? 'хозяин' : x.bot ? 'бот' : x.online ? '' : 'не в сети';
-    return `<div class="lseat"><span class="ldot" style="background:${col}"></span><span class="lname">${x.bot ? 'Бот' : x.name}${x.uid === me ? ' (ты)' : ''}</span>${tag ? `<span class="ltag">${tag}</span>` : ''}
+    const pr = L.profMode === 'pick' && x.prof ? D.PROFS.find(p => p.id === x.prof) : null;
+    return `<div class="lseat"><span class="ldot" style="background:${col}"></span><span class="lname">${x.bot ? 'Бот' : x.name}${x.uid === me ? ' (ты)' : ''}${pr ? `<small class="lpr">${pr.e} ${pr.n}</small>` : ''}</span>${tag ? `<span class="ltag">${tag}</span>` : ''}
       ${host && x.uid !== me ? `<button class="lbtn" onclick="UI.kick(${i})">убрать</button>` : ''}</div>`;
   }).join('');
   box.innerHTML = `<div class="lbl" style="margin-top:6px">Комната</div><div class="lcode">${L.code}</div>
@@ -419,7 +420,12 @@ function showLobby(wait) {
     <div class="lbl">За столом · ${L.seats.length} из 4</div><div class="lseats">${rows}</div>
     <div class="lbl">Сложность</div>
     ${host ? `<div class="seg">${Object.entries(D.DIFF).map(([k, v]) => `<button class="${k === L.diff ? 'on' : ''}" onclick="UI.lobbyDiff('${k}')">${v.n}</button>`).join('')}</div>` : `<div class="note">${D.DIFF[L.diff].n}</div>`}
-    <div class="note" style="margin-top:8px">Профессии раздаются случайно. Если игрок не ходит 60 секунд, за него сходит компьютер.</div>
+    <div class="lbl">Профессии</div>
+    ${host ? `<div class="seg">${[['random', 'Случайно'], ['pick', 'На выбор']].map(([k, n]) => `<button class="${(L.profMode || 'random') === k ? 'on' : ''}" onclick="UI.lobbyProfMode('${k}')">${n}</button>`).join('')}</div>` : `<div class="note">${L.profMode === 'pick' ? 'Каждый выбирает себе' : 'Раздаются случайно'}</div>`}
+    ${L.profMode === 'pick' ? (() => { const mine = (L.seats.find(x => x.uid === me) || {}).prof;
+      return `<div class="lprofs">${D.PROFS.map(p => `<button class="lprof ${mine === p.id ? 'on' : ''}" onclick="UI.lobbyProf('${p.id}')"><span>${p.e}</span>${p.n}<small>${money(p.salary)}</small></button>`).join('')}</div>
+      <div class="note">Не выбрал(а) — достанется случайная. Боты всегда случайные.</div>`; })() : ''}
+    <div class="note" style="margin-top:8px">Если игрок не ходит 60 секунд, за него сходит компьютер.</div>
     ${host ? `<button class="b" style="width:100%;margin-top:14px;background:#2f7d55" onclick="UI.lobbyStart()">Начать игру · ${humans} ${humans === 1 ? 'человек' : humans < 5 ? 'человека' : 'человек'}${L.seats.length > humans ? ` и ${L.seats.length - humans} ${L.seats.length - humans === 1 ? 'бот' : 'бота'}` : ''}</button>`
       : `<div class="note" style="text-align:center;margin-top:14px">Ждём, когда хозяин начнёт игру</div>`}
     <button class="b sec" style="width:100%;margin-top:8px" onclick="UI.leaveRoom()">Выйти</button>`;
@@ -532,9 +538,41 @@ function renderRace() {
   KolesoTable.seats(order.map(q => ({
     name: q.id === ME ? 'Ты' : q.name + (q.auto ? ' · авто' : ''), emoji: q.emoji, color: q.color,
     cashTxt: q.bankrupt ? 'банкрот' : act === q.id && left != null && !q.bot && S.phase !== 'over' ? `⏱ ${left} c` : shortMoney(q.cash), progress: q.bankrupt ? 0 : C.progress(S, q),
-    active: act === q.id && S.phase !== 'over', out: q.bankrupt, badge: q.mode === 'fast' ? '★' : q.mode === 'mid' ? '◆' : '', cash: q.cash,
+    active: act === q.id && S.phase !== 'over', out: q.bankrupt, badge: q.mode === 'fast' ? '★' : q.mode === 'mid' ? '◆' : '', cash: q.cash, pid: q.id,
   })));
+  renderTableChat();
 }
+// чат на сукне: последние сообщения, тап открывает полный чат
+function renderTableChat() {
+  const el = $('tchat'); if (!el || !S) return;
+  const strip = t => String(t).replace(/<[^>]+>/g, '');
+  el.innerHTML = S.log.filter(x => x.k !== 'news' || !x.rum).slice(-3).map(x => {
+    if (x.k === 'sys') return `<div class="tl sys">${strip(x.text)}</div>`;
+    if (x.k === 'news') return `<div class="tl">📰 ${strip(x.text)}</div>`;
+    const p = S.players[x.pid];
+    return `<div class="tl"><b style="color:${p.color}">${x.pid === ME ? 'Ты' : p.name}:</b> ${strip(x.text)}</div>`;
+  }).join('');
+}
+// карточка соперника по нажатию на кружок: деньги, поток, бизнесы (акции не раскрываем)
+function showPlayer(pid) {
+  const q = S.players[pid]; if (!q) return;
+  const biz = q.assets.filter(a => a.t !== 'stock'), stocks = q.assets.filter(a => a.t === 'stock').length;
+  const flow = q.mode === 'fast' ? q.fflow : C.cashflow(S, q);
+  const dr = q.mode === 'fast' ? D.DREAMS[q.dream] : null;
+  const html = `<div class="kind" style="color:${q.color}">${q.mode === 'fast' ? '★ Большая игра' : q.mode === 'mid' ? '◆ Средний круг' : 'Колесо'}</div>
+    <div class="sh-e">${q.emoji}</div><div class="sh-t">${pid === ME ? 'Ты' : q.name}</div><div class="sh-d">${q.profName}${q.free && q.mode === 'rat' ? ' · без работы' : ''}${q.bankrupt ? ' · банкрот' : ''}</div>
+    ${rowsHTML([['Наличные', money(q.cash)], [q.mode === 'fast' ? 'Поток за выплату' : 'Денежный поток', (flow >= 0 ? '+' : '−') + money(Math.abs(flow)), flow >= 0 ? 'g' : 'r'],
+      ...(q.mode === 'fast' ? [] : [['Пассивный доход', money(C.passive(S, q))], ['Расходы', money(C.expenses(S, q))]]),
+      ['Долги', C.loanTotal(q) ? money(C.loanTotal(q)) : 'нет', C.loanTotal(q) ? 'r' : ''], ['К цели', C.progress(S, q) + '%', 'y'],
+      ...(dr ? [['Мечта', `${dr.e} ${dr.n}`]] : [])])}
+    ${biz.length ? `<div class="lbl" style="margin-top:8px">Бизнес и недвижимость</div>${biz.map(a => `<div class="ln"><span class="s">${a.e} ${a.n}${a.cat === 'mbiz' ? ` · ${D.RULES.lvlNames[(a.lvl || 1) - 1].toLowerCase()}` : ''}</span><span class="g">+${money(C.assetIncome(S, q, a))}</span></div>`).join('')}` : '<div class="note">Бизнеса пока нет</div>'}
+    ${(q.finv || []).length ? `<div class="lbl" style="margin-top:8px">Компании и инвестиции</div>${q.finv.map(v => `<div class="ln"><span class="s">${v.e || '🏢'} ${v.n || v.tk}</span><span class="g">+${money(v.flow)}</span></div>`).join('')}` : ''}
+    ${(q.dirs || []).length ? `<div class="lbl" style="margin-top:8px">Команда</div><div class="note">${q.dirs.map(d => d.e + ' ' + d.n).join(', ')}</div>` : ''}
+    ${pid !== ME && stocks ? '<div class="note" style="margin-top:6px">Есть акции — какие, не видно.</div>' : ''}
+    <div class="btns"><button class="b sec" onclick="UI.closePlayer()">Закрыть</button></div>`;
+  playerUI = pid; openSheet(html);
+}
+let playerUI = null;
 function cycleInfo() {
   const c = S.cycle, ph = C.phase(S), alive = S.players.filter(q => !q.bankrupt).length || 1;
   const exact = C.has(S.players[ME], 'trading');
@@ -804,6 +842,8 @@ function renderChat() {
 
 /* ---------- карточки ---------- */
 function renderSheet() {
+  if (playerUI != null && !(S.phase === 'card' && S.cur === ME && !busy)) return showPlayer(playerUI);
+  playerUI = null;
   if (tradeUI) return openSheet(stockSheet(tradeUI.tk, tradeUI.price, tradeUI.side, tradeUI.label, 'UI.confirmTrade()') + '<button class="b sec" onclick="UI.closeTrade()">Отмена</button></div>');
   if (!busy && S.phase === 'card' && S.cur === ME && S.card) return openSheet(cardHTML(S.card));
   closeSheet();
@@ -1062,6 +1102,14 @@ function cardHTML(c) {
       <div class="sh-d">Директор работает на тебя каждый месяц, пока не уволишь. В команде ${(me.dirs || []).length} из ${D.RULES.maxDirs}.</div>
       <div class="btns">${c.opts.map((d, i) => btn(`${d.e} ${d.n}<br><small style="opacity:.8;font-weight:500">${d.d}${d.sec ? ' · ' + D.SECTORS[d.sec].n.toLowerCase() : ''} · ${money(d.pay)}/мес</small>`, `UI.A('hire',{i:${i}})`, 'sec', full)).join('')}${btn('Никого не брать', "UI.A('pass')", 'sec')}</div>`;
     }
+    case 'strike': {
+      return `<div class="kind" style="color:#ff7a5a">🎯 Удар по конкуренту</div><div class="sh-e">🎯</div><div class="sh-t">По кому ударить?</div>
+      <div class="sh-d">Бить можно только соперников в Большой игре. Компромат срежет поток на ${Math.round(D.RULES.strikePress * 100)}%, налоговая заморозит следующие дивиденды. После удара цель защищена ${D.RULES.strikeShield} хода.</div>
+      ${c.targets.map(i => { const q = S.players[i], sh = q.shield > q.turns;
+        return `<div class="strk"><div class="strk-h" style="color:${q.color}">${q.emoji} ${q.name} · ${C.progress(S, q)}% к цели${sh ? ' · под защитой' : ''}</div>
+        <div class="strk-b">${btn(`Компромат ${money(c.press)}`, `UI.A('strike',{target:${i},k:'press'})`, 'warn', sh || me.cash < c.press)}${btn(`Налоговая ${money(c.audit)}`, `UI.A('strike',{target:${i},k:'audit'})`, 'sec', sh || me.cash < c.audit)}</div></div>`; }).join('')}
+      <div class="btns">${btn('Никого не трогать', "UI.A('pass')", 'sec')}</div>`;
+    }
     case 'island': {
       const np = Math.round(c.price * (1 + D.RULES.islandStep) / 1000) * 1000, lead = c.log[c.log.length - 1];
       return `<div class="kind" style="color:var(--gold)">✨ Торги за остров</div><div class="sh-e">🏝</div><div class="sh-t">${lead[0] === 'me' ? 'Твоя ставка лучшая' : `${lead[0]} предлагает ${money(lead[1])}`}</div>
@@ -1236,7 +1284,14 @@ function switchView(v) {
 }
 document.querySelectorAll('.tab').forEach(t => { t.onclick = () => switchView(t.dataset.v); });
 $('rollBtn').onclick = () => A('roll');
-document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#dice.tap')) A('roll'); });
+document.addEventListener('click', e => {
+  if (!e.target.closest) return;
+  if (e.target.closest('#dice.tap')) return A('roll');
+  if (e.target.id === 'shade' && playerUI != null) { playerUI = null; closeSheet(); return render(); }
+  const st = e.target.closest('.seat[data-pid]');
+  if (st && S && !tut) { if (S.phase === 'card' && S.cur === ME && S.card) return toast('Сначала реши по карточке'); return showPlayer(+st.dataset.pid); }
+  if (e.target.closest('#tchat') && S) switchView('chat');
+});
 
 window.UI = {
   A, toast, switchView, start, resume, debugFast, trade,
@@ -1254,8 +1309,9 @@ window.UI = {
   dbg: (k, n) => { if (S) dispatch({ type: 'dbg', pid: ME, k, n }); },
   online: () => netOpen(null), joinCode: () => { const c = ($('joinInp').value || '').trim().toUpperCase(); if (c) netOpen(c); },
   rejoin: () => { const c = lsGet(ROOMKEY); if (c) netOpen(c); },
-  addBot: () => netSend({ t: 'addBot' }), kick: i => netSend({ t: 'kick', i }), lobbyDiff: k => netSend({ t: 'diff', k }),
+  addBot: () => netSend({ t: 'addBot' }), lobbyProfMode: k => netSend({ t: 'profMode', k }), lobbyProf: id => netSend({ t: 'prof', id }), kick: i => netSend({ t: 'kick', i }), lobbyDiff: k => netSend({ t: 'diff', k }),
   lobbyStart: () => netSend({ t: 'start' }), invite, leaveRoom: () => netLeave(), rematch: () => netSend({ t: 'rematch' }),
+  closePlayer: () => { playerUI = null; closeSheet(); render(); },
   _dbg: () => ({ S, ME, busy, NET }),
   watch: () => { NET.watch = true; overlayKey = null; render(); },
   setQty: n => { qtyUI = n; render(); },
@@ -1275,7 +1331,7 @@ window.UI = {
 initTg();
 applyTheme(wallet().theme);
 // самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
-const APP_V = '0.15';
+const APP_V = '0.16';
 if (location.protocol.startsWith('http')) try {
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
     if (!j || !j.v || j.v === APP_V) return;
