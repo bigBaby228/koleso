@@ -464,3 +464,6 @@ body[class*="th-"] .mainbtn,body[class*="th-"] .b:not(.sec):not(.warn){color:var
 .th-paper .sl{border-color:rgba(0,0,0,.2)}
 .swaphd{font-size:13px;color:var(--hint);margin:2px 0 2px;text-align:center}.swaphd a{color:var(--link);cursor:pointer}
 .sellmini.arm{background:#c9772b;color:#fff}
+.sellmini.grow{background:#2f7d55;color:#fff;margin-top:3px}
+.sellmini.grow:disabled{opacity:.45}
+.auclog{font-size:12px;color:var(--hint);margin:6px 0;max-height:90px;overflow-y:auto;text-align:center}

@@ -42,7 +42,7 @@ const ICON = {
 const CELL_ICON = {
   pay: 'coin', mpay: 'coin', fpay: 'coin', small: 'home', sbiz: 'shop', big: 'tower', market: 'chart', tempt: 'bag',
   gamble: 'dice', charity: 'heart', child: 'stroller', down: 'exit', gig: 'wrench', course: 'cap',
-  mbiz: 'factory', mevent: 'bolt', lux: 'gem', expand: 'expand',
+  mbiz: 'factory', mevent: 'bolt', lux: 'gem', expand: 'expand', hire: 'expand',
   invest: 'case', startup: 'rocket', dream: 'star', lawsuit: 'scales', tax: 'taxdoc', divorce: 'broken', crisis: 'storm',
   acq: 'buyout', ipo: 'bell', media: 'tv', raid: 'mask', sanctions: 'ban', crash: 'crash',
 };
