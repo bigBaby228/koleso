@@ -80,7 +80,7 @@ function build(el, o) {
   host = el; cellCount = o.cells.length;
   const W = el.clientWidth || 360;
   const par = el.parentElement, avail = par && par.clientHeight ? par.clientHeight - (el.getBoundingClientRect().top - par.getBoundingClientRect().top) - 16 : 0; // заполняем экран по высоте
-  const H = Math.round(Math.max(W * 1.1, Math.min(W * 1.38, avail > 0 ? avail : W * 1.22)));
+  const H = Math.round(Math.max(W * 0.92, Math.min(W * 1.38, avail > 0 ? avail : W * 1.22))); // на низких экранах стол сплющивается, но помещается целиком
   el.style.height = H + 'px';
   const lv = LEVEL[o.mode];
   const cs = cellCount > 34 ? 25 : 29; // размер клетки

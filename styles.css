@@ -677,3 +677,29 @@ body[class*="th-"] .mid .mainbtn,body[class*="th-"] .fast .mainbtn{background:li
 /* меньше анимаций */
 .lite *,.lite *::before,.lite *::after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.05s!important}
 @media (prefers-reduced-motion:reduce){.dice.spin .die,.ttok.hop,.app.fx-hit{animation:none}}
+
+/* ---------- места под рекламу (0.20) ----------
+   Скрыты, пока сеть не отдала баннер. Отступ от кнопки хода — чтобы не попадали пальцем. */
+.adslot{display:none;flex-shrink:0;width:320px;max-width:calc(100% - 24px);margin:0 auto}
+.adslot.on{display:block}
+.adlbl{font-size:9px;line-height:11px;letter-spacing:.02em;color:var(--hint);opacity:.75;margin:0 0 2px 2px;text-align:left}
+.adbox{height:50px;border-radius:8px;overflow:hidden;background:var(--bg2);box-shadow:inset 0 0 0 1px var(--line)}
+.adbox>*{max-width:100%}
+#scrGame .adslot{margin:2px auto calc(6px + env(safe-area-inset-bottom))}
+#scrGame .adslot.on ~ .mainbtn,#scrGame .mainbtn:has(+ .adslot.on){margin-bottom:8px}
+.start .adslot{margin:12px auto 2px}
+.win .adslot{margin:16px auto 0}
+.ad-demo{height:100%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--hint);
+  background:repeating-linear-gradient(45deg,transparent 0 8px,rgba(127,127,127,.08) 8px 16px)}
+.lite .adbox{box-shadow:none}
+/* низкие экраны (iPhone SE и т.п.): шапка компактнее, чтобы стол с баннером помещался целиком */
+@media (max-height:760px){
+  .hud{padding:7px 12px 6px}
+  .free{margin-top:5px}
+  .slots{margin-top:3px}
+  .advice{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .newsbar{margin:8px 12px 0;padding:6px 10px}
+  .newsbar>span:last-child,.newsbar>div:last-child{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .mainbtn{padding:12px}
+  .tablewrap{margin:6px 10px 2px}
+}

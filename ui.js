@@ -193,10 +193,12 @@ function showStart(msg) {
   $('scrLobby').classList.add('hidden');
   closeSheet(); $('win').classList.add('hidden'); $('app').classList.remove('fast');
   $('scrGame').classList.add('hidden'); $('scrStart').classList.remove('hidden');
+  adsRefresh();
   drawStart(msg);
 }
 function showGame() {
   $('scrStart').classList.add('hidden'); $('scrLobby').classList.add('hidden'); $('scrGame').classList.remove('hidden');
+  adsRefresh();
   builtKey = null; lastCash = null; overlayKey = null; $('win').classList.add('hidden');
   switchView('board');
 }
@@ -511,6 +513,7 @@ const TUT = [
   { t: 'Готово!', d: 'Начни с «Нормальной» сложности. Удачи!' },
 ];
 function startTutorial() {
+  if (window.KolesoAds) KolesoAds.pause(true);
   start('teacher'); clearTimeout(botTimer);
   const me = S.players[ME];
   me.assets.push(Object.assign({}, D.SBIZ[5], { flow: 270, id: ++S.uid, loan: 3000, loanRate: 0.035 }));
@@ -540,7 +543,14 @@ function tutShow() {
   box.classList.remove('hidden');
   setTimeout(() => { if (st.sel === '#dice') KolesoTable.dice([5], false, wallet().dice); const el = st.sel && document.querySelector(st.sel); if (el) el.classList.add('tut-hl'); }, 50);
 }
-function tutEnd() { tut = null; $('coach').classList.add('hidden'); document.querySelectorAll('.tut-hl').forEach(e => e.classList.remove('tut-hl')); clearSave(); showStart(); }
+function adsRefresh() { if (window.KolesoAds && !tut) KolesoAds.refresh(); }
+function adsDemo() {
+  if (!window.KolesoAds) return;
+  const on = !KolesoAds.demo(); KolesoAds.setDemo(on);
+  const b = $('adsDemoBtn'); if (b) b.textContent = on ? 'Скрыть места рекламы' : 'Показать места рекламы';
+  toast(on ? 'Места рекламы показаны' : 'Места рекламы скрыты');
+}
+function tutEnd() { tut = null; if (window.KolesoAds) KolesoAds.pause(false); $('coach').classList.add('hidden'); document.querySelectorAll('.tut-hl').forEach(e => e.classList.remove('tut-hl')); clearSave(); showStart(); }
 
 /* ---------- достижения ---------- */
 const ACH_KEY = 'koleso-ach-v1';
@@ -571,6 +581,18 @@ function showAch() {
     <button class="b sec" style="width:100%" onclick="UI.closeAch()">Закрыть</button>`;
   w.classList.remove('hidden');
 }
+// высота поля поменялась (появился баннер, повернули экран) — перестраиваем стол под неё
+let boardH = 0, boardT = null;
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => {
+  const v = $('v-board'), h = v ? v.clientHeight : 0;
+  if (!h || Math.abs(h - boardH) < 12) return;
+  boardH = h; clearTimeout(boardT);
+  boardT = setTimeout(function again() {
+    if (!S || $('scrGame').classList.contains('hidden') || v.classList.contains('hidden')) return;
+    if (busy) { boardT = setTimeout(again, 400); return; }
+    builtKey = null; render();
+  }, 150);
+}).observe($('v-board'));
 function buildBoard() {
   const me = S.players[ME], [cells, T] = ringOf(me);
   builtKey = me.mode + '|' + me.dream;
@@ -1324,6 +1346,7 @@ function renderOverlay() {
     w.className = 'win lose';
     w.innerHTML = `<div class="big">💀</div><h2>Ты банкрот</h2><p>Партия продолжается без тебя. Можешь досмотреть, кто победит.</p>
     ${coinLine(awardGame())}<div class="btns"><button class="b" onclick="UI.watch()">Смотреть партию</button>${(me.hist || []).length ? '<button class="b sec" onclick="UI.review()">Разбор партии</button>' : ''}<button class="b sec" onclick="UI.leaveRoom()">Выйти из комнаты</button></div>`;
+    if (window.KolesoAds) { w.insertAdjacentHTML('beforeend', KolesoAds.html('over')); KolesoAds.mount(w.lastElementChild); }
     w.classList.remove('hidden'); return;
   }
   if (key === 'stage') {
@@ -1387,6 +1410,7 @@ function renderOverlay() {
     if (n && bt) bt.insertAdjacentHTML('beforebegin', coinLine(n));
     if (bt && (me.hist || []).length) bt.insertAdjacentHTML('beforeend', '<button class="b sec" onclick="UI.review()">Разбор партии</button>');
   }
+  if ((key === 'over' || key === 'out') && window.KolesoAds) { w.insertAdjacentHTML('beforeend', KolesoAds.html('over')); KolesoAds.mount(w.lastElementChild); }
   w.classList.remove('hidden');
 }
 
@@ -1413,6 +1437,7 @@ document.addEventListener('click', e => {
 });
 
 window.UI = {
+  adsDemo,
   A, toast, switchView, start, resume, debugFast, trade,
   setDiff: k => { diffSel = k; drawStart(); },
   startTutorial, tutEnd, tutGo: d => { tut.i = Math.max(0, Math.min(TUT.length - 1, tut.i + d)); tutShow(); },
@@ -1454,7 +1479,7 @@ applyTheme(wallet().theme);
 applySettings();
 try { if (tg && tg.SettingsButton) { tg.SettingsButton.show(); tg.SettingsButton.onClick(showSettings); } } catch (e) { /* ignore */ }
 // самообновление: Telegram держит страницу в кэше до 10 минут — если на сервере версия новее, перезагружаемся
-const APP_V = '0.19.2';
+const APP_V = '0.20';
 if (location.protocol.startsWith('http')) try {
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(j => {
     if (!j || !j.v || j.v === APP_V) return;
